@@ -1,0 +1,75 @@
+unit PCAMultiAxisIteratorService;
+
+interface
+
+uses
+  SysUtils, Matrix, PCAService, StripeDetectionService;
+
+type
+  // Holds the stripe detection result for one axis
+  TStripeDetectionResult = record
+    AxisIndex: Integer;
+    AxisDirection: TDoubleMatrix;
+    StripeCount: Integer;
+    StripeSizes: array of Integer;
+  end;
+
+  TStripeDetectionResults = array of TStripeDetectionResult;
+
+/// <summary>
+/// Iterates over all 3 PCA components and calls DetectStripesAlongAxis for each.
+/// Returns information about how many stripes and their sizes per axis.
+/// </summary>
+function IteratePCAAxesForStripes(
+  const Points: TDoubleMatrix;
+  const PCAResult: TPCAResult;
+  const GapFactor: Double = 3.0
+): TStripeDetectionResults;
+
+implementation
+
+function IteratePCAAxesForStripes(
+  const Points: TDoubleMatrix;
+  const PCAResult: TPCAResult;
+  const GapFactor: Double = 3.0
+): TStripeDetectionResults;
+var
+  i, j: Integer;
+  AxisDir: TDoubleMatrix;
+  Stripes: TArray<TDoubleMatrix>;
+begin
+  SetLength(Result, 3);
+
+  for i := 0 to 2 do
+  begin
+    // Build axis direction vector from PCA eigenvectors
+    AxisDir := TDoubleMatrix.Create(3, 1);
+    AxisDir[0,0] := PCAResult.EigenVectors[i,0];
+    AxisDir[1,0] := PCAResult.EigenVectors[i,1];
+    AxisDir[2,0] := PCAResult.EigenVectors[i,2];
+
+    Writeln(Format('--- PCA Axis %d: (%.4f, %.4f, %.4f) ---', [
+      i, AxisDir[0,0], AxisDir[1,0], AxisDir[2,0]]));
+
+    // Detect stripes along this axis
+    Stripes := DetectStripesAlongAxis(Points, AxisDir, GapFactor);
+
+    // Fill in result
+    Result[i].AxisIndex := i;
+    Result[i].AxisDirection := AxisDir;
+    Result[i].StripeCount := Length(Stripes);
+    SetLength(Result[i].StripeSizes, Length(Stripes));
+
+    for j := 0 to High(Stripes) do
+      Result[i].StripeSizes[j] := Stripes[j].Width;
+
+    // Debug output
+    Writeln(Format('Axis %d: Found %d stripes.', [i, Length(Stripes)]));
+    for j := 0 to High(Stripes) do
+      Writeln(Format('  Stripe %d has %d points.', [j, Stripes[j].Width]));
+  end;
+end;
+
+end.
+
+

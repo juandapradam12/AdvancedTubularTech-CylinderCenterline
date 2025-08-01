@@ -1,0 +1,66 @@
+unit CylinderLengthService;
+
+interface
+
+uses
+  Matrix, SysUtils, Math;
+
+function EstimateCylinderLength(const Points, AxisDirection: TDoubleMatrix): Double;
+
+implementation
+
+
+end.
+                                   function EstimateCylinderLength(const Points, AxisDirection: TDoubleMatrix): Double;
+var
+  i: Integer;
+  N: Integer;
+  Proj, MinProj, MaxProj: Double;
+  AxisVec, PointVec: array[0..2] of Double;
+begin
+  N := Points.Width;
+
+  // Validate Points: 3×N
+  if Points.Height <> 3 then
+    raise Exception.Create('Points must be a 3×N matrix.');
+
+  // Accept AxisDirection as 3×1 or 1×3
+  if (AxisDirection.Height = 3) and (AxisDirection.Width = 1) then
+  begin
+    AxisVec[0] := AxisDirection[0, 0];
+    AxisVec[1] := AxisDirection[1, 0];
+    AxisVec[2] := AxisDirection[2, 0];
+  end
+  else if (AxisDirection.Height = 1) and (AxisDirection.Width = 3) then
+  begin
+    AxisVec[0] := AxisDirection[0, 0];
+    AxisVec[1] := AxisDirection[0, 1];
+    AxisVec[2] := AxisDirection[0, 2];
+  end
+  else
+    raise Exception.Create('AxisDirection must be 3×1 or 1×3.');
+
+  // Initialize range
+  MinProj := MaxDouble;
+  MaxProj := -MaxDouble;
+
+  for i := 0 to N - 1 do
+  begin
+    PointVec[0] := Points[0, i];
+    PointVec[1] := Points[1, i];
+    PointVec[2] := Points[2, i];
+
+    // Dot product (projection)
+    Proj := PointVec[0] * AxisVec[0] +
+            PointVec[1] * AxisVec[1] +
+            PointVec[2] * AxisVec[2];
+
+    if Proj < MinProj then
+      MinProj := Proj;
+    if Proj > MaxProj then
+      MaxProj := Proj;
+  end;
+
+  Result := MaxProj - MinProj;
+end;
+

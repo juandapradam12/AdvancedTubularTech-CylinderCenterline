@@ -1,0 +1,96 @@
+unit SparseCylinderEvaluationService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix,
+  StripeDetectionService, CircleFitService, InterceptService, CylinderLengthService;
+
+type
+  TCylinderEvalResult = record
+    AxisDir: TDoubleMatrix;
+    MeanRadius: Double;
+    StdRadius: Double;
+    AxisPoint: TDoubleMatrix;
+    ZIntercept: TDoubleMatrix;
+    LengthEst: Double;
+  end;
+
+procedure EvaluatePCAAxesForSparseCloud(const Points, EigenVectors: TDoubleMatrix);
+
+implementation
+
+
+
+procedure EvaluatePCAAxesForSparseCloud(const Points, EigenVectors: TDoubleMatrix);
+var
+  AxisDir: TDoubleMatrix;
+  Proj2D: TDoubleMatrix;
+  Fit: TCircleFitResult;
+  U, W: array[0..2] of Double;
+  AxisIndex, j: Integer;
+begin
+  if (Points.Height <> 3) then
+    raise Exception.Create('Points must be a 3×N matrix.');
+  if (EigenVectors.Height <> 3) or (EigenVectors.Width <> 3) then
+    raise Exception.Create('EigenVectors must be 3×3.');
+
+  for AxisIndex := 0 to 2 do
+  begin
+    // --- Axis direction from PCA ---
+    AxisDir := TDoubleMatrix.Create(3,1);
+    AxisDir[0,0] := EigenVectors[AxisIndex,0];
+    AxisDir[1,0] := EigenVectors[AxisIndex,1];
+    AxisDir[2,0] := EigenVectors[AxisIndex,2];
+
+    // --- Build an orthonormal basis (U,W) for the plane perpendicular to AxisDir ---
+    // Choose an arbitrary vector to cross with AxisDir:
+    if Abs(AxisDir[2,0]) < 0.9 then
+    begin
+      U[0] :=  AxisDir[1,0]*1.0 - AxisDir[2,0]*0.0;
+      U[1] :=  AxisDir[2,0]*0.0 - AxisDir[0,0]*1.0;
+      U[2] :=  AxisDir[0,0]*0.0 - AxisDir[1,0]*0.0;
+    end
+    else
+    begin
+      U[0] :=  AxisDir[1,0]*0.0 - AxisDir[2,0]*1.0;
+      U[1] :=  AxisDir[2,0]*0.0 - AxisDir[0,0]*0.0;
+      U[2] :=  AxisDir[0,0]*1.0 - AxisDir[1,0]*0.0;
+    end;
+    // normalize U
+    var lenU := Sqrt(Sqr(U[0])+Sqr(U[1])+Sqr(U[2]));
+    U[0] := U[0]/lenU; U[1] := U[1]/lenU; U[2] := U[2]/lenU;
+
+    // compute V = AxisDir × U
+    W[0] := AxisDir[1,0]*U[2] - AxisDir[2,0]*U[1];
+    W[1] := AxisDir[2,0]*U[0] - AxisDir[0,0]*U[2];
+    W[2] := AxisDir[0,0]*U[1] - AxisDir[1,0]*U[0];
+    var lenW := Sqrt(Sqr(W[0])+Sqr(W[1])+Sqr(W[2]));
+    W[0] := W[0]/lenW; W[1] := W[1]/lenW; W[2] := W[2]/lenW;
+
+    // --- Project points to this plane ---
+    Proj2D := TDoubleMatrix.Create(2, Points.Width);
+    for j := 0 to Points.Width-1 do
+    begin
+      Proj2D[0,j] := Points[j,0]*U[0] + Points[j,1]*U[1] + Points[j,2]*U[2];
+      Proj2D[1,j] := Points[j,0]*W[0] + Points[j,1]*W[1] + Points[j,2]*W[2];
+    end;
+
+    // --- Fit a circle to projected points ---
+    Fit := FitCircle2D(Proj2D);
+
+    // --- Output results ---
+    Writeln(Format('Axis %d -> Direction: (%.4f, %.4f, %.4f)',
+      [AxisIndex, AxisDir[0,0], AxisDir[1,0], AxisDir[2,0]]));
+    Writeln(Format('   Fitted radius: %.4f', [Fit.Radius]));
+    Writeln(Format('   Residual: %.4f', [Fit.Residual]));
+
+    // cleanup
+    Proj2D.Free;
+    AxisDir.Free;
+  end;
+end;
+
+
+end.
+

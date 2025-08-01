@@ -1,0 +1,45 @@
+unit SmartInterceptService;
+
+interface
+
+uses
+  Matrix, ZInterceptService, SysUtils, Math;
+
+function ComputeSmartIntercept(
+  const LiftedCenter, AxisDirection: TDoubleMatrix
+): TDoubleMatrix;
+
+implementation
+
+function ComputeSmartIntercept(
+  const LiftedCenter, AxisDirection: TDoubleMatrix
+): TDoubleMatrix;
+var
+  vz, vy, t: Double;
+begin
+  vz := AxisDirection[2, 0];
+
+  if Abs(vz) > 1e-6 then
+  begin
+    // Default case: use standard Z-intercept logic
+    Result := ComputeZIntercept(LiftedCenter, AxisDirection);
+    Exit;
+  end;
+
+  // Z component is too small --> try intercept with Y = 0
+  vy := AxisDirection[1, 0];
+  if Abs(vy) < 1e-8 then
+    raise Exception.Create('Axis is approximately parallel to all principal planes. Cannot compute smart intercept.');
+
+  // Compute t for Y = 0
+  t := -LiftedCenter[1, 0] / vy;
+
+  // Construct intercept point with Y = 0
+  Result := TDoubleMatrix.Create(3, 1);
+  Result[0, 0] := LiftedCenter[0, 0] + t * AxisDirection[0, 0];
+  Result[1, 0] := LiftedCenter[1, 0] + t * AxisDirection[1, 0];
+  Result[2, 0] := LiftedCenter[2, 0] + t * AxisDirection[2, 0];
+end;
+
+end.
+

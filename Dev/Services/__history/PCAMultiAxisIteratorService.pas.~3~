@@ -1,0 +1,75 @@
+unit PCAMultiAxisIteratorService;
+
+interface
+
+uses
+  SysUtils, Matrix, PCAService, StripeDetectionService;
+
+type
+  // Holds the stripe detection result for one axis
+  TStripeDetectionResult = record
+    AxisIndex: Integer;
+    AxisDirection: TDoubleMatrix;
+    StripeCount: Integer;
+    StripeSizes: array of Integer;
+  end;
+
+  TStripeDetectionResults = array of TStripeDetectionResult;
+
+/// <summary>
+/// Iterate over all 3 PCA axes, run DetectStripesAlongAxis on each,
+/// and collect counts and sizes of stripes.
+/// </summary>
+function IteratePCAAxesForStripes(
+  const Points: TDoubleMatrix;
+  const PCAResult: TPCAResult;
+  const GapFactor: Double = 3.0
+): TStripeDetectionResults;
+
+implementation
+
+function IteratePCAAxesForStripes(
+  const Points: TDoubleMatrix;
+  const PCAResult: TPCAResult;
+  const GapFactor: Double
+): TStripeDetectionResults;
+var
+  i, j: Integer;
+  AxisDir: TDoubleMatrix;
+  StripeList: TArray<TDoubleMatrix>;
+begin
+  SetLength(Result, 3);
+
+  for i := 0 to 2 do
+  begin
+    // Create a 3×1 vector for the axis direction
+    AxisDir := TDoubleMatrix.Create(3, 1);
+    AxisDir[0,0] := PCAResult.EigenVectors[i,0];
+    AxisDir[1,0] := PCAResult.EigenVectors[i,1];
+    AxisDir[2,0] := PCAResult.EigenVectors[i,2];
+
+    Writeln(Format('--- PCA Axis %d: (%.4f, %.4f, %.4f) ---', [
+      i, AxisDir[0,0], AxisDir[1,0], AxisDir[2,0]]));
+
+    // ? Detect stripes for this axis
+    StripeList := DetectStripesAlongAxis(Points, AxisDir, GapFactor);
+
+    // ? Fill in the result
+    Result[i].AxisIndex := i;
+    Result[i].AxisDirection := AxisDir;
+    Result[i].StripeCount := Length(StripeList);
+    SetLength(Result[i].StripeSizes, Length(StripeList));
+
+    for j := 0 to High(StripeList) do
+      Result[i].StripeSizes[j] := StripeList[j].Width;
+
+    // ? Debug
+    Writeln(Format('Axis %d: Found %d stripes.', [i, Length(StripeList)]));
+    for j := 0 to High(StripeList) do
+      Writeln(Format('  Stripe %d has %d points.', [j, StripeList[j].Width]));
+  end;
+end;
+
+end.
+
+

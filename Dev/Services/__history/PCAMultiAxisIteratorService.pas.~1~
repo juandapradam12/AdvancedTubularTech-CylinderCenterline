@@ -1,0 +1,70 @@
+unit PCAMultiAxisIteratorService;
+
+interface
+
+uses
+  SysUtils, Matrix, PCAService, StripeDetectionService; // <-- StripeDetectionService is where DetectStripesAlongAxis resides
+
+type
+  TStripeDetectionResult = record
+    AxisIndex: Integer;
+    AxisDirection: TDoubleMatrix;
+    StripeCount: Integer;
+    StripeSizes: array of Integer;
+  end;
+
+  TStripeDetectionResults = array of TStripeDetectionResult;
+
+function IteratePCAAxesForStripes(
+  const Points: TDoubleMatrix;
+  const PCAResult: TPCAResult;
+  const GapFactor: Double = 3.0
+): TStripeDetectionResults;
+
+implementation
+
+function IteratePCAAxesForStripes(
+  const Points: TDoubleMatrix;
+  const PCAResult: TPCAResult;
+  const GapFactor: Double = 3.0
+): TStripeDetectionResults;
+var
+  i, j: Integer;
+  AxisDir: TDoubleMatrix;
+  Stripes: TArray<TDoubleMatrix>;
+  Labels: TArray<Integer>;
+begin
+  SetLength(Result, 3);
+
+  for i := 0 to 2 do
+  begin
+    // Build axis direction from PCA eigenvectors
+    AxisDir := TDoubleMatrix.Create(3, 1);
+    AxisDir[0,0] := PCAResult.EigenVectors[i,0];
+    AxisDir[1,0] := PCAResult.EigenVectors[i,1];
+    AxisDir[2,0] := PCAResult.EigenVectors[i,2];
+
+    Writeln(Format('--- PCA Axis %d: (%.4f, %.4f, %.4f) ---', [
+      i, AxisDir[0,0], AxisDir[1,0], AxisDir[2,0]]));
+
+    // Call your stripe detection
+    Stripes := DetectStripesAlongAxis(Points, AxisDir, GapFactor, Labels);
+
+    // Populate result
+    Result[i].AxisIndex := i;
+    Result[i].AxisDirection := AxisDir; // keep reference to this axis
+    Result[i].StripeCount := Length(Stripes);
+
+    SetLength(Result[i].StripeSizes, Length(Stripes));
+    for j := 0 to High(Stripes) do
+      Result[i].StripeSizes[j] := Stripes[j].Width;
+
+    // Debug output
+    Writeln(Format('Axis %d: Found %d stripes.', [i, Length(Stripes)]));
+    for j := 0 to High(Stripes) do
+      Writeln(Format('  Stripe %d has %d points.', [j, Stripes[j].Width]));
+  end;
+end;
+
+end.
+

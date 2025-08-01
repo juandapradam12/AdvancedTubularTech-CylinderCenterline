@@ -1,0 +1,72 @@
+unit ReadDataUtils;
+
+interface
+
+uses
+  SysUtils, Classes, Matrix;
+
+function ReadPointCloudFromFile(const FilePath: string): IMatrix;
+
+implementation
+
+function ReadPointCloudFromFile(const FilePath: string): IMatrix;
+var
+  MyFile: TextFile;
+  SLine: string;
+  Parts: TArray<string>;
+  X, Y, Z: array of Double;
+  i: Integer;
+begin
+  if not FileExists(FilePath) then
+  begin
+    Writeln('File not found: ', FilePath);
+    Exit(nil);
+  end;
+
+  Writeln('Reading file: ', FilePath);
+
+  AssignFile(MyFile, FilePath);
+  Reset(MyFile);
+
+  // Skip header
+  ReadLn(MyFile, SLine);
+
+  SetLength(X, 0);
+  SetLength(Y, 0);
+  SetLength(Z, 0);
+
+  while not EOF(MyFile) do
+  begin
+
+    ReadLn(MyFile, SLine);
+
+    SLine := StringReplace(SLine, ' ', '', [rfReplaceAll]);
+    Writeln(SLine);
+
+    Parts := SLine.Split([',']);
+    if Length(Parts) = 3 then
+    begin
+      SetLength(X, Length(X) + 1);
+      SetLength(Y, Length(Y) + 1);
+      SetLength(Z, Length(Z) + 1);
+
+      X[High(X)] := StrToFloat(StringReplace(Parts[0], '.', ',', [rfReplaceAll]));
+      Y[High(Y)] := StrToFloat(StringReplace(Parts[1], '.', ',', [rfReplaceAll]));
+      Z[High(Z)] := StrToFloat(StringReplace(Parts[2], '.', ',', [rfReplaceAll]));
+    end;
+  end;
+
+  CloseFile(MyFile);
+
+  // Create matrix: 3 rows (X, Y, Z), N columns
+  Result := TDoubleMatrix.Create(3, Length(X));
+  for i := 0 to High(X) do
+  begin
+    Result[0, i] := X[i];
+    Result[1, i] := Y[i];
+    Result[2, i] := Z[i];
+  end;
+end;
+
+end.
+

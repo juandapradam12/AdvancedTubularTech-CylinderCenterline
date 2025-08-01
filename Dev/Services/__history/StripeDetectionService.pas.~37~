@@ -1,0 +1,115 @@
+unit StripeDetectionService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix;
+
+type
+  TStripeGroups = TArray<TArray<Integer>>;
+
+function DetectStripesAlongAxis(const Points, AxisDir: TDoubleMatrix; const GapFactor: Double = 3.0): TStripeGroups;
+
+implementation
+
+function Dot3(const A: TDoubleMatrix; ColIndex: Integer; const AxisDir: TDoubleMatrix): Double;
+begin
+  // Dot product of AxisDir (3×1) with column A[:, ColIndex]
+  Result := A[0, ColIndex] * AxisDir[0,0] +
+            A[1, ColIndex] * AxisDir[1,0] +
+            A[2, ColIndex] * AxisDir[2,0];
+end;
+
+function DetectStripesAlongAxis(const Points, AxisDir: TDoubleMatrix; const GapFactor: Double): TStripeGroups;
+var
+  N, i: Integer;
+  Proj: TArray<Double>;
+  SortedIdx: TArray<Integer>;
+  Diffs: TArray<Double>;
+  MeanGap, StdGap, GapThresh: Double;
+  CurrentLabel: Integer;
+  Labels: TArray<Integer>;
+  k, idx: Integer;
+begin
+  N := Points.Width;
+  SetLength(Proj, N);
+  SetLength(SortedIdx, N);
+  SetLength(Labels, N);
+
+  // 1. Compute projections
+  for i := 0 to N-1 do
+  begin
+    Proj[i] := Dot3(Points, i, AxisDir);
+    SortedIdx[i] := i;
+  end;
+
+  // 2. Sort indices by projection values
+  TArray.Sort<Integer>(SortedIdx,
+    TComparer<Integer>.Construct(
+      function(const L, R: Integer): Integer
+      begin
+        if Proj[L] < Proj[R] then Result := -1
+        else if Proj[L] > Proj[R] then Result := 1
+        else Result := 0;
+      end
+    ));
+
+  // 3. Compute differences
+  SetLength(Diffs, N-1);
+  for i := 0 to N-2 do
+    Diffs[i] := Proj[SortedIdx[i+1]] - Proj[SortedIdx[i]];
+
+  // 4. Compute mean and std of diffs
+  if N > 1 then
+  begin
+    var Sum := 0.0;
+    for i := 0 to High(Diffs) do Sum := Sum + Diffs[i];
+    MeanGap := Sum / Length(Diffs);
+
+    var SumSq := 0.0;
+    for i := 0 to High(Diffs) do SumSq := SumSq + Sqr(Diffs[i] - MeanGap);
+    if Length(Diffs) > 1 then
+      StdGap := Sqrt(SumSq / (Length(Diffs)-1))
+    else
+      StdGap := 0.0;
+  end
+  else
+  begin
+    MeanGap := 0;
+    StdGap := 0;
+  end;
+
+  GapThresh := MeanGap + GapFactor * StdGap;
+
+  // 5. Assign labels
+  CurrentLabel := 0;
+  Labels[SortedIdx[0]] := CurrentLabel;
+  for i := 0 to N-2 do
+  begin
+    if Diffs[i] > GapThresh then
+      Inc(CurrentLabel);
+    Labels[SortedIdx[i+1]] := CurrentLabel;
+  end;
+
+  // 6. Group indices by labels
+  var MaxLabel := CurrentLabel;
+  SetLength(Result, MaxLabel+1);
+  for k := 0 to MaxLabel do
+  begin
+    // Count how many points in this label
+    var Count := 0;
+    for i := 0 to N-1 do
+      if Labels[i] = k then Inc(Count);
+    SetLength(Result[k], Count);
+    Count := 0;
+    for i := 0 to N-1 do
+      if Labels[i] = k then
+      begin
+        Result[k][Count] := i; // original point index
+        Inc(Count);
+      end;
+  end;
+end;
+
+end.
+

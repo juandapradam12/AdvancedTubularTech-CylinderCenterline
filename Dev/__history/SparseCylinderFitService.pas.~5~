@@ -1,0 +1,227 @@
+unit SparseCylinderFitService;
+
+interface
+
+uses
+  SysUtils, Classes, Math,
+  Matrix,
+  CircleFitService;
+
+type
+  TSparseCylinderResult = record
+    AxisDir: TDoubleMatrix;   // 3×1
+    AxisPoint: TDoubleMatrix; // 3×1
+    Radius: Double;
+    ZIntercept: TDoubleMatrix; // 3×1
+    Score: Double;
+    Valid: Boolean;
+  end;
+
+function RunSparseCylinderPipeline(const Points: TDoubleMatrix): TSparseCylinderResult;
+
+implementation
+
+uses
+  Generics.Collections;
+
+function IsDenseStripe(const Stripe: TDoubleMatrix; SpreadFactor: Double = 2.5): Boolean;
+var
+  i, j, N: Integer;
+  Dist, MaxSpread: Double;
+  Distances: TList<Double>;
+begin
+  N := Stripe.Width;
+  if N < 3 then
+    Exit(False);
+
+  Distances := TList<Double>.Create;
+  try
+    MaxSpread := 0;
+    for i := 0 to N-1 do
+      for j := i+1 to N-1 do
+      begin
+        Dist := Hypot(Stripe[0,i]-Stripe[0,j], Stripe[1,i]-Stripe[1,j]);
+        Dist := Hypot(Dist, Stripe[2,i]-Stripe[2,j]); // full 3D distance
+        if Dist > MaxSpread then
+          MaxSpread := Dist;
+        if Dist > 0 then
+          Distances.Add(Dist);
+      end;
+
+    if Distances.Count = 0 then
+      Exit(False);
+
+    Distances.Sort;
+    var Median := Distances[Distances.Count div 2];
+
+    Result := (MaxSpread < SpreadFactor * Median);
+  finally
+    Distances.Free;
+  end;
+end;
+
+function ProjectXY(const Stripe: TDoubleMatrix): TDoubleMatrix;
+var
+  j: Integer;
+begin
+  Result := TDoubleMatrix.Create(2, Stripe.Width);
+  for j := 0 to Stripe.Width-1 do
+  begin
+    Result[0,j] := Stripe[0,j];
+    Result[1,j] := Stripe[1,j];
+  end;
+end;
+
+function BruteForceSparseCylinderPipeline(const Points: TDoubleMatrix): TSparseCylinderResult;
+var
+  N: Integer;
+  MaskA: TArray<Boolean>;
+  StripeA, StripeB: TDoubleMatrix;
+  FitA, FitB: TCircleFitResult;
+  Score, BestScore: Double;
+  AxisPoint: TDoubleMatrix;
+  cAx, cAy, cBx, cBy: Double;
+  MeanZA, MeanZB: Double;
+  i, j: Integer;
+  mask: Integer;
+  countA: Integer;
+begin
+  Result.Valid := False;
+  N := Points.Width;
+  if N < 6 then
+  begin
+    Writeln('? Not enough points (<6) to fit a cylinder.');
+    Exit;
+  end;
+
+  BestScore := MaxDouble;
+
+  // Use bitmask enumeration for all subsets
+  // For N up to ~20 this is fine.
+  for mask := 1 to (1 shl N) - 2 do
+  begin
+    // Count bits in mask
+    countA := 0;
+    for i := 0 to N - 1 do
+      if (mask and (1 shl i)) <> 0 then
+        Inc(countA);
+
+    if (countA >= 3) and (N - countA >= 3) then
+    begin
+      SetLength(MaskA, N);
+      for i := 0 to N - 1 do
+        MaskA[i] := ((mask and (1 shl i)) <> 0);
+
+      // Build stripes
+      StripeA := TDoubleMatrix.Create(3, countA);
+      StripeB := TDoubleMatrix.Create(3, N - countA);
+      var ia, ib: Integer;
+      ia := 0;
+      ib := 0;
+      for i := 0 to N - 1 do
+      begin
+        if MaskA[i] then
+        begin
+          StripeA[0, ia] := Points[0, i];
+          StripeA[1, ia] := Points[1, i];
+          StripeA[2, ia] := Points[2, i];
+          Inc(ia);
+        end
+        else
+        begin
+          StripeB[0, ib] := Points[i, 0];
+          StripeB[1, ib] := Points[i, 1];
+          StripeB[2, ib] := Points[i, 2];
+          Inc(ib);
+        end;
+      end;
+
+      if IsDenseStripe(StripeA) and IsDenseStripe(StripeB) then
+      begin
+        // Project to XY
+        var ProjA := ProjectXY(StripeA);
+        var ProjB := ProjectXY(StripeB);
+
+        Writeln('--- Debugging shapes ---');
+        Writeln(Format('StripeA SubMatrix: %d rows × %d columns', [ProjA.Height, ProjA.Width]));
+        Writeln(Format('StripeB SubMatrix: %d rows × %d columns', [ProjB.Height, ProjB.Width]));
+
+
+        FitA := FitCircle2D(ProjA);
+        FitB := FitCircle2D(ProjB);
+        ProjA.Free;
+        ProjB.Free;
+
+        if Abs(FitA.Radius - FitB.Radius) <= 1.0 then
+        begin
+          Score := FitA.Residual + FitB.Residual;
+          if Score < BestScore then
+          begin
+            BestScore := Score;
+            Result.Valid := True;
+
+            cAx := FitA.Center2D[0, 0];
+            cAy := FitA.Center2D[0, 1];
+            cBx := FitB.Center2D[0, 0];
+            cBy := FitB.Center2D[0, 1];
+
+            MeanZA := 0;
+            for j := 0 to StripeA.Width - 1 do
+              MeanZA := MeanZA + StripeA[2, j];
+            MeanZA := MeanZA / StripeA.Width;
+
+            MeanZB := 0;
+            for j := 0 to StripeB.Width - 1 do
+              MeanZB := MeanZB + StripeB[2, j];
+            MeanZB := MeanZB / StripeB.Width;
+
+            AxisPoint := TDoubleMatrix.Create(3, 1);
+            AxisPoint[0, 0] := (cAx + cBx) / 2;
+            AxisPoint[1, 0] := (cAy + cBy) / 2;
+            AxisPoint[2, 0] := (MeanZA + MeanZB) / 2;
+
+            Result.AxisPoint := AxisPoint;
+            Result.AxisDir := TDoubleMatrix.Create(3, 1);
+            Result.AxisDir[0, 0] := 0;
+            Result.AxisDir[1, 0] := 0;
+            Result.AxisDir[2, 0] := 1;
+
+            Result.Radius := (FitA.Radius + FitB.Radius) / 2;
+            Result.ZIntercept := TDoubleMatrix.Create(3, 1);
+            Result.ZIntercept[0, 0] := Result.AxisPoint[0, 0];
+            Result.ZIntercept[1, 0] := Result.AxisPoint[1, 0];
+            Result.ZIntercept[2, 0] := 0;
+            Result.Score := Score;
+          end;
+        end;
+      end;
+
+      StripeA.Free;
+      StripeB.Free;
+    end;
+  end;
+
+  if Result.Valid then
+  begin
+    Writeln;
+    Writeln('=== FINAL CYLINDER RESULTS (SPARSE) ===');
+    Writeln(Format('Axis Direction: (%.4f, %.4f, %.4f)', [
+      Result.AxisDir[0,0], Result.AxisDir[1,0], Result.AxisDir[2,0]]));
+    Writeln(Format('Mean Radius: %.4f', [Result.Radius]));
+    Writeln(Format('Axis Point: (%.4f, %.4f, %.4f)', [
+      Result.AxisPoint[0,0], Result.AxisPoint[1,0], Result.AxisPoint[2,0]]));
+    Writeln(Format('Z Intercept: (%.4f, %.4f, %.4f)', [
+      Result.ZIntercept[0,0], Result.ZIntercept[1,0], Result.ZIntercept[2,0]]));
+  end
+  else
+    Writeln('? No valid sparse configuration found.');
+end;
+
+
+function RunSparseCylinderPipeline(const Points: TDoubleMatrix): TSparseCylinderResult;
+begin
+  Result := BruteForceSparseCylinderPipeline(Points);
+end;
+
+end.
+

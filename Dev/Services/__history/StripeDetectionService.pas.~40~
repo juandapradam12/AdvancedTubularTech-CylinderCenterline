@@ -1,0 +1,165 @@
+unit StripeDetectionService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix;
+
+type
+  TIntegerArray = array of Integer;
+  TDoubleArray = array of Double;
+
+  TStripeResult = record
+    Labels: TIntegerArray;
+    Stripes: array of TDoubleMatrix; // each stripe: 3×M matrix
+  end;
+
+function DetectStripesAlongAxis(const Points, AxisDir: TDoubleMatrix; GapFactor: Double = 3.0): TStripeResult;
+
+implementation
+
+type
+  TSortableProj = record
+    Value: Double;
+    Index: Integer;
+  end;
+  TSortableProjArray = array of TSortableProj;
+
+procedure QuickSort(var A: TSortableProjArray; L, R: Integer);
+var
+  I, J: Integer;
+  P, T: TSortableProj;
+begin
+  I := L;
+  J := R;
+  P := A[(L + R) div 2];
+  repeat
+    while A[I].Value < P.Value do Inc(I);
+    while A[J].Value > P.Value do Dec(J);
+    if I <= J then
+    begin
+      T := A[I];
+      A[I] := A[J];
+      A[J] := T;
+      Inc(I);
+      Dec(J);
+    end;
+  until I > J;
+  if L < J then QuickSort(A, L, J);
+  if I < R then QuickSort(A, I, R);
+end;
+
+function DetectStripesAlongAxis(const Points, AxisDir: TDoubleMatrix; GapFactor: Double): TStripeResult;
+var
+  N, i, j: Integer;
+  NormAxis: array[0..2] of Double;
+  Proj: TSortableProjArray;
+  SortedIdx: array of Integer;
+  SortedVals: TDoubleArray;
+  Diffs: TDoubleArray;
+  MeanGap, StdGap, GapThresh: Double;
+  Labels: TIntegerArray;
+  CurrentStripe: Integer;
+  StripeCounts: array of Integer;
+  k: Integer;
+begin
+  if Points.Height <> 3 then
+    raise Exception.Create('Points must be 3×N matrix');
+
+  N := Points.Width;
+
+  // normalize axis
+  NormAxis[0] := AxisDir[0,0];
+  NormAxis[1] := AxisDir[1,0];
+  NormAxis[2] := AxisDir[2,0];
+  with TDoubleMatrix.Create(3,1) do Free; // nothing, just syntax placeholder
+  // normalize manually
+  var LenAxis := Sqrt(Sqr(NormAxis[0]) + Sqr(NormAxis[1]) + Sqr(NormAxis[2]));
+  if LenAxis < 1e-12 then
+    raise Exception.Create('AxisDir has zero length.');
+  NormAxis[0] := NormAxis[0]/LenAxis;
+  NormAxis[1] := NormAxis[1]/LenAxis;
+  NormAxis[2] := NormAxis[2]/LenAxis;
+
+  // project all points
+  SetLength(Proj, N);
+  for i := 0 to N-1 do
+  begin
+    Proj[i].Value := Points[i, 0]*NormAxis[0] + Points[i, 1]*NormAxis[1] + Points[i, 2]*NormAxis[2];
+    Proj[i].Index := i;
+  end;
+
+  // sort projections
+  QuickSort(Proj, 0, N-1);
+
+  SetLength(SortedIdx, N);
+  SetLength(SortedVals, N);
+  for i := 0 to N-1 do
+  begin
+    SortedIdx[i] := Proj[i].Index;
+    SortedVals[i] := Proj[i].Value;
+  end;
+
+  // compute diffs
+  SetLength(Diffs, N-1);
+  for i := 0 to N-2 do
+    Diffs[i] := SortedVals[i+1] - SortedVals[i];
+
+  // mean and std
+  MeanGap := 0;
+  for i := 0 to High(Diffs) do
+    MeanGap := MeanGap + Diffs[i];
+  MeanGap := MeanGap / Max(1, Length(Diffs));
+
+  StdGap := 0;
+  for i := 0 to High(Diffs) do
+    StdGap := StdGap + Sqr(Diffs[i] - MeanGap);
+  if Length(Diffs) > 1 then
+    StdGap := Sqrt(StdGap / (Length(Diffs)-1))
+  else
+    StdGap := 0;
+
+  GapThresh := MeanGap + GapFactor * StdGap;
+
+  // assign stripe labels
+  SetLength(Labels, N);
+  CurrentStripe := 0;
+  Labels[SortedIdx[0]] := CurrentStripe;
+  for i := 0 to High(Diffs) do
+  begin
+    if Diffs[i] > GapThresh then
+      Inc(CurrentStripe);
+    Labels[SortedIdx[i+1]] := CurrentStripe;
+  end;
+
+  // count stripes
+  SetLength(StripeCounts, CurrentStripe+1);
+  for i := 0 to N-1 do
+  begin
+    k := Labels[i];
+    Inc(StripeCounts[k]);
+  end;
+
+  // build stripe matrices
+  SetLength(Result.Stripes, CurrentStripe+1);
+  for k := 0 to High(Result.Stripes) do
+    Result.Stripes[k] := TDoubleMatrix.Create(3, StripeCounts[k]);
+
+  // fill
+  var PosCount: array of Integer;
+  SetLength(PosCount, Length(StripeCounts));
+  for i := 0 to N-1 do
+  begin
+    k := Labels[i];
+    Result.Stripes[k][0, PosCount[k]] := Points[i, 0];
+    Result.Stripes[k][1, PosCount[k]] := Points[i, 1];
+    Result.Stripes[k][2, PosCount[k]] := Points[i, 2];
+    Inc(PosCount[k]);
+  end;
+
+  // assign labels
+  Result.Labels := Labels;
+end;
+
+end.
+

@@ -1,0 +1,151 @@
+unit SparseCylinderEvaluationService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix,
+  StripeDetectionService, CircleFitService, InterceptService, CylinderLengthService;
+
+type
+  TCylinderEvalResult = record
+    AxisDir: TDoubleMatrix;
+    MeanRadius: Double;
+    StdRadius: Double;
+    AxisPoint: TDoubleMatrix;
+    ZIntercept: TDoubleMatrix;
+    LengthEst: Double;
+  end;
+
+function RunSparseCylinderEvaluation(const Points, AxisDir: TDoubleMatrix): TCylinderEvalResult;
+
+implementation
+
+function RunSparseCylinderEvaluation(const Points, AxisDir: TDoubleMatrix): TCylinderEvalResult;
+var
+  StripeRes: TStripeResult;
+  i: Integer;
+  Stripe: TDoubleMatrix;
+  u, v, n: array[0..2] of Double;
+  proj2D: TDoubleMatrix;
+  fit: TCircleFitResult;
+  radii: array of Double;
+  centers: array of TDoubleMatrix;
+  axisPoint: TDoubleMatrix;
+  sumRadius, sumSq: Double;
+  cx, cy, cz: Double;
+  j: Integer;
+begin
+  // Normalize axis
+  n[0] := AxisDir[0,0];
+  n[1] := AxisDir[1,0];
+  n[2] := AxisDir[2,0];
+  var len := Sqrt(Sqr(n[0]) + Sqr(n[1]) + Sqr(n[2]));
+  if len < 1e-12 then
+    raise Exception.Create('AxisDir has zero length.');
+  n[0] := n[0] / len;
+  n[1] := n[1] / len;
+  n[2] := n[2] / len;
+
+  // Build perpendicular basis (u,v)
+  if Abs(n[2]) < 0.9 then
+  begin
+    // cross with Z axis
+    u[0] := n[1]*1 - n[2]*0;
+    u[1] := n[2]*0 - n[0]*1;
+    u[2] := n[0]*0 - n[1]*0;
+  end
+  else
+  begin
+    // cross with Y axis
+    u[0] := n[1]*0 - n[2]*1;
+    u[1] := n[2]*0 - n[0]*0;
+    u[2] := n[0]*1 - n[1]*0;
+  end;
+
+  var ulen := Sqrt(Sqr(u[0]) + Sqr(u[1]) + Sqr(u[2]));
+  u[0] := u[0] / ulen; u[1] := u[1] / ulen; u[2] := u[2] / ulen;
+
+  v[0] := n[1]*u[2] - n[2]*u[1];
+  v[1] := n[2]*u[0] - n[0]*u[2];
+  v[2] := n[0]*u[1] - n[1]*u[0];
+  var vlen := Sqrt(Sqr(v[0]) + Sqr(v[1]) + Sqr(v[2]));
+  v[0] := v[0] / vlen; v[1] := v[1] / vlen; v[2] := v[2] / vlen;
+
+  // Detect stripes along given axis
+  StripeRes := DetectStripesAlongAxis(Points, AxisDir, 3.0);
+
+  SetLength(radii, Length(StripeRes.Stripes));
+  SetLength(centers, Length(StripeRes.Stripes));
+
+  var validCount := 0;
+  sumRadius := 0;
+  sumSq := 0;
+
+  for i := 0 to High(StripeRes.Stripes) do
+  begin
+    Stripe := StripeRes.Stripes[i];
+    if Stripe.Height < 3 then
+      continue;
+
+    // Project stripe points to perpendicular plane
+    proj2D := TDoubleMatrix.Create(Stripe.Height, 2);
+    for j := 0 to Stripe.Height-1 do
+    begin
+      var px := Stripe[j,0];
+      var py := Stripe[j,1];
+      var pz := Stripe[j,2];
+
+      proj2D[j,0] := px*u[0] + py*u[1] + pz*u[2];
+      proj2D[j,1] := px*v[0] + py*v[1] + pz*v[2];
+    end;
+
+    // Fit circle to this stripe
+    fit := FitCircle2D(proj2D.Transpose); // FitCircle2D expects 2×N (use Transpose)
+    radii[validCount] := fit.Radius;
+
+    // Center back to 3D
+    cx := fit.Center2D[0,0]*u[0] + fit.Center2D[0,1]*v[0];
+    cy := fit.Center2D[0,0]*u[1] + fit.Center2D[0,1]*v[1];
+    cz := fit.Center2D[0,0]*u[2] + fit.Center2D[0,1]*v[2];
+
+    centers[validCount] := TDoubleMatrix.Create(3,1);
+    centers[validCount][0,0] := cx;
+    centers[validCount][1,0] := cy;
+    centers[validCount][2,0] := cz;
+
+    sumRadius := sumRadius + fit.Radius;
+    sumSq := sumSq + Sqr(fit.Radius);
+    Inc(validCount);
+
+    proj2D.Free;
+  end;
+
+  if validCount = 0 then
+    raise Exception.Create('Not enough valid stripes to evaluate cylinder.');
+
+  // Compute mean & std radius
+  Result.MeanRadius := sumRadius / validCount;
+  Result.StdRadius := Sqrt((sumSq/validCount) - Sqr(Result.MeanRadius));
+
+  // Axis point as mean of centers
+  axisPoint := TDoubleMatrix.Create(3,1);
+  axisPoint.Fill(0);
+  for i := 0 to validCount-1 do
+  begin
+    axisPoint[0,0] := axisPoint[0,0] + centers[i][0,0];
+    axisPoint[1,0] := axisPoint[1,0] + centers[i][1,0];
+    axisPoint[2,0] := axisPoint[2,0] + centers[i][2,0];
+    centers[i].Free;
+  end;
+  axisPoint[0,0] := axisPoint[0,0] / validCount;
+  axisPoint[1,0] := axisPoint[1,0] / validCount;
+  axisPoint[2,0] := axisPoint[2,0] / validCount;
+
+  Result.AxisDir := AxisDir;
+  Result.AxisPoint := axisPoint;
+  Result.ZIntercept := ComputeIntercept(axisPoint, AxisDir, 2);
+  Result.LengthEst := EstimateCylinderLength(Points, AxisDir);
+end;
+
+end.
+

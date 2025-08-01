@@ -1,0 +1,69 @@
+unit SparseCylinderEvaluationService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix,
+  StripeDetectionService, CircleFitService, InterceptService, CylinderLengthService;
+
+type
+  TCylinderEvalResult = record
+    AxisDir: TDoubleMatrix;
+    MeanRadius: Double;
+    StdRadius: Double;
+    AxisPoint: TDoubleMatrix;
+    ZIntercept: TDoubleMatrix;
+    LengthEst: Double;
+  end;
+
+function ProjectToOrthogonalPlane(const Points, EigenVectors, MeanVector: TDoubleMatrix;
+  AxisIndex: Integer): TDoubleMatrix;
+
+implementation
+
+
+
+function ProjectToOrthogonalPlane(const Points, EigenVectors, MeanVector: TDoubleMatrix;
+  AxisIndex: Integer): TDoubleMatrix;
+var
+  N, i: Integer;
+  U, V: array[0..2] of Double;
+  Centered: array[0..2] of Double;
+begin
+  // Determine which two PCA components span the plane
+  var DimA, DimB: Integer;
+  case AxisIndex of
+    0: begin DimA := 1; DimB := 2; end;
+    1: begin DimA := 0; DimB := 2; end;
+    2: begin DimA := 0; DimB := 1; end;
+  else
+    raise Exception.Create('Invalid axis index');
+  end;
+
+  // Load basis vectors from PCA
+  U[0] := EigenVectors[DimA, 0];
+  U[1] := EigenVectors[DimA, 1];
+  U[2] := EigenVectors[DimA, 2];
+
+  V[0] := EigenVectors[DimB, 0];
+  V[1] := EigenVectors[DimB, 1];
+  V[2] := EigenVectors[DimB, 2];
+
+  N := Points.Width;
+  Result := TDoubleMatrix.Create(2, N); // store as 2×N (X row, Y row)
+
+  for i := 0 to N - 1 do
+  begin
+    Centered[0] := Points[i, 0] - MeanVector[0, 0];
+    Centered[1] := Points[i, 1] - MeanVector[0, 1];
+    Centered[2] := Points[i, 2] - MeanVector[0, 2];
+
+    Result[0, i] := Centered[0]*U[0] + Centered[1]*U[1] + Centered[2]*U[2];
+    Result[1, i] := Centered[0]*V[0] + Centered[1]*V[1] + Centered[2]*V[2];
+  end;
+end;
+
+
+
+end.
+

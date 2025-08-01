@@ -1,0 +1,204 @@
+unit FormJDPMCylinderFit;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants,
+  System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.Buttons,
+  Types,
+  Matrix,
+  MtxTimer,
+  Math,
+  MatrixConst,
+  Generics.Collections,
+  ReadDataUtils,
+  PCAService,
+  PCAProjectionService,
+  CircleFitService,
+  PCAMultiPlaneIterationService,
+  InterceptService,
+  CylinderLengthService,
+  SmartInterceptService;
+
+var
+  StartTime: Int64;
+  EndTime: Int64;
+  DeltaTime: Double;
+  DeltaTimeStr: string;
+
+
+type
+  TForm_JDPMCylinderFit = class(TForm)
+    FileOpenDialog_PointCloudFilename: TFileOpenDialog;
+    sLabel_DefaultNotepadEditor: TLabel;
+    sMemo_PointcloudFilename: TMemo;
+    sMemo1: TMemo;
+    sBitBtn_OpenSelectDialog_DefaultNotepadFolder: TBitBtn;
+    sBitBtn1: TBitBtn;
+    procedure sBitBtn_OpenSelectDialog_DefaultNotepadFolderClick(
+      Sender: TObject);
+    procedure sBitBtn1Click(Sender: TObject);
+  private
+    { Private declarations }
+
+    procedure JDPM_CalcCylinderCenterline;
+
+  public
+    { Public declarations }
+  end;
+
+var
+  Form_JDPMCylinderFit: TForm_JDPMCylinderFit;
+
+implementation
+
+{$R *.dfm}
+
+
+procedure TForm_JDPMCylinderFit.JDPM_CalcCylinderCenterline;
+var
+
+  StartTime: Int64;
+  EndTime: Int64;
+  DeltaTime: Double;
+  DeltaTimeStr: string;
+
+  FolderPath, FileName: string;
+
+  Points: TDoubleMatrix;
+  AxisDirection: TDoubleMatrix;
+  PCAResult: TPCAResult;
+
+  ScoredPlanes: TPlaneScoreArray;
+  i: Integer;
+
+  PlaneScores: TPlaneScoreArray;
+  BestPlane: TPlaneScoreRecord;
+
+  LiftedCenter, Intercept: TDoubleMatrix;
+  LengthEstimate, Radius, LOD: Double;
+
+  Mean, ReorderedMean: TDoubleMatrix;
+
+
+begin
+
+  sMemo1.Lines.Clear;
+
+  sMemo1.Lines.Add('Cylinder Centerline');
+  sMemo1.Lines.Add('');
+
+  // My test files separate the XYZ with tab characters
+  // My computer uses . to separate the integer and fractional part of a float
+  //Points := ReadPointCloudFromFile_XE2(sMemo_PointcloudFilename.text, #9, '.');
+
+  // Your test files separate the XYZ with comma characters
+  // Your computer uses , to separate the integer and fractional part of a float
+  Points := ReadPointCloudFromFile_XE2(sMemo_PointcloudFilename.text, ',', ',');
+
+  if Points = nil then
+  begin
+    sMemo1.Lines.Add('Failed to load point cloud data.');
+    Exit;
+  end;
+
+  if (Points.Height <> 3) and (Points.Width = 3) then
+  begin
+    Points := Points.Transpose;
+  end;
+
+    // Start timer
+  StartTime := MtxGetTime;
+
+  try
+
+    //// PCA ////
+    PCAResult := PerformPCA(Points, 1.0);
+
+    //// MULTI-PLANE ITERATION ////
+    PlaneScores := ScoreAllPCAPlanes(Points, PCAResult.EigenVectors, PCAResult.MeanVector);
+
+    //// BEST PLANE SELECTION ////
+    BestPlane := SelectBestPlaneFromScores(PlaneScores);
+
+    //// Radius ////
+    Radius := BestPlane.Radius;
+
+    //// AXIS DIRECTION ////
+    AxisDirection := GetCylinderAxisFromBestPlane(PCAResult.EigenVectors, BestPlane);
+
+    //// CENTER LIFTING ////
+    LiftedCenter := Lift2DCenterTo3D(BestPlane.Center2D, PCAResult.MeanVector, PCAResult.EigenVectors, BestPlane.DimX, BestPlane.DimY);
+
+    //// Z INTERCEPT ////
+    Intercept := ComputeSmartIntercept(LiftedCenter, AxisDirection);
+
+    //// LENGTH ESTIMATE ////
+    LengthEstimate := EstimateCylinderLength(Points, AxisDirection);
+
+    //// L/OD Ratio ////
+    LOD := LengthEstimate / (2.0 * Radius);  // L / OD
+
+    //// PRINT IN TERMINAL ////
+
+
+    sMemo1.Lines.Add(Format('Axis Direction  = (%.4f, %.4f, %.4f)', [
+      AxisDirection[0, 0],
+      AxisDirection[1, 0],
+      AxisDirection[2, 0]]));
+
+    sMemo1.Lines.Add(Format('Radius          = %.4f', [BestPlane.Radius]));
+
+    sMemo1.Lines.Add(Format('Intercept     = (%.4f, %.4f, %.4f)',
+      [Intercept[0, 0], Intercept[1, 0], Intercept[2, 0]]));
+
+    sMemo1.Lines.Add(' ');
+
+    sMemo1.Lines.Add(Format('Length Estimate = %.3f', [LengthEstimate]));
+    sMemo1.Lines.Add(Format('L/OD Ratio      = %.4f', [LOD]));
+
+  except
+    on E: Exception do
+    begin
+      sMemo1.Lines.Add('Error performing PCA: ' + E.Message);
+      Exit;
+    end;
+  end;
+
+    // End timer
+  EndTime := MtxGetTime;
+
+  // Calculate elapsed time
+  DeltaTime := (EndTime - StartTime) / mtxFreq;
+  DeltaTimeStr := FloatToStr(DeltaTime);
+
+  // Display elapsed time
+  sMemo1.Lines.Add('');
+  sMemo1.Lines.Add('Elapsed Time = ' + DeltaTimeStr + ' s');
+
+end;
+
+procedure TForm_JDPMCylinderFit.sBitBtn1Click(Sender: TObject);
+begin
+
+  try
+    JDPM_CalcCylinderCenterline;
+  except
+    on E: Exception do
+      sMemo1.Lines.Add(E.ClassName + ': ' + E.Message);
+  end;
+
+end;
+
+procedure TForm_JDPMCylinderFit.sBitBtn_OpenSelectDialog_DefaultNotepadFolderClick(
+  Sender: TObject);
+begin
+  FileOpenDialog_PointCloudFilename.Defaultfolder :=
+    'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterlineApp\Data\'; //'C:\Users\MichaelCone\wkspaces\repository_vtube2\_source\CylinderFitEngine\TestClouds\';
+  if not FileOpenDialog_PointCloudFilename.execute then exit;
+  sMemo_PointcloudFilename.Text := FileOpenDialog_PointCloudFilename.FileName;
+
+end;
+
+end.

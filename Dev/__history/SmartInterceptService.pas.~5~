@@ -1,0 +1,80 @@
+unit SmartInterceptService;
+
+interface
+
+uses
+  Matrix;
+
+function ComputeSmartIntercept(
+  const LiftedCenter, AxisDirection: TDoubleMatrix
+): TDoubleMatrix;
+
+implementation
+
+uses
+  SysUtils, Math;
+
+// Compute norm of a 3D vector
+function VectorNorm(const V: TDoubleMatrix): Double;
+begin
+  Result := Sqrt(Sqr(V[0, 0]) + Sqr(V[1, 0]) + Sqr(V[2, 0]));
+end;
+
+// Check if axis is approximately aligned with Z direction
+function IsAxisParallelToZ(const AxisDir: TDoubleMatrix; Tolerance: Double = 0.01): Boolean;
+var
+  DotProd, Norm, CosAngle: Double;
+begin
+  Norm := VectorNorm(AxisDir);
+  if Norm = 0 then
+    raise Exception.Create('Zero-length axis vector');
+
+  DotProd := AxisDir[2, 0]; // Dot product with Z-axis (0, 0, 1)
+  CosAngle := Abs(DotProd / Norm);  // cos(theta), |cos(theta)| = 1 when aligned
+
+  Result := Abs(CosAngle - 1.0) < Tolerance;
+end;
+
+// Compute Z- or Y-intercept depending on alignment
+function ComputeSmartIntercept(
+  const LiftedCenter, AxisDirection: TDoubleMatrix
+): TDoubleMatrix;
+var
+  t, vz, vy: Double;
+begin
+  Result := TDoubleMatrix.Create(3, 1);
+
+  if IsAxisParallelToZ(AxisDirection) then
+  begin
+    // Intersect with Y = 0 plane
+    vy := AxisDirection[1, 0];
+
+    if Abs(vy) < 1e-8 then
+      raise Exception.Create('Axis is parallel to both Z and Y; cannot compute Y-intercept.');
+
+    t := -LiftedCenter[1, 0] / vy;
+
+    Result[0, 0] := LiftedCenter[0, 0] + t * AxisDirection[0, 0];
+    Result[1, 0] := 0;
+    Result[2, 0] := LiftedCenter[2, 0] + t * AxisDirection[2, 0];
+  end
+  else
+  begin
+    // Intersect with Z = 0 plane
+    vz := AxisDirection[2, 0];
+
+    if Abs(vz) < 1e-8 then
+      raise Exception.Create('Axis direction is parallel to the XY plane. No Z-intercept possible.');
+
+    t := -LiftedCenter[2, 0] / vz;
+
+    Result[0, 0] := LiftedCenter[0, 0] + t * AxisDirection[0, 0];
+    Result[1, 0] := LiftedCenter[1, 0] + t * AxisDirection[1, 0];
+    Result[2, 0] := LiftedCenter[2, 0] + t * AxisDirection[2, 0];
+  end;
+end;
+
+end.
+
+
+
