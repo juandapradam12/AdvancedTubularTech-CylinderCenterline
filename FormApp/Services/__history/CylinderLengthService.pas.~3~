@@ -1,0 +1,54 @@
+unit CylinderLengthService;
+
+interface
+
+uses
+  Matrix, SysUtils, Math;
+
+function EstimateCylinderLength(const Points, AxisDirection: TDoubleMatrix): Double;
+
+implementation
+
+function EstimateCylinderLength(const Points, AxisDirection: TDoubleMatrix): Double;
+var
+  i: Integer;
+  N: Integer;
+  Proj, MinProj, MaxProj: Double;
+  AxisVec, PointVec: array[0..2] of Double;
+begin
+  N := Points.Width;
+
+  Writeln(Format('Points Size: %d rows × %d columns', [Points.Height, Points.Width]));
+  if (Points.Height <> 3) or (AxisDirection.Height <> 3) or (AxisDirection.Width <> 1) then
+    raise Exception.Create('Invalid input dimensions.');
+
+  MinProj := MaxDouble;
+  MaxProj := -MaxDouble;
+
+  // Store axis direction as vector
+  AxisVec[0] := AxisDirection[0, 0];
+  AxisVec[1] := AxisDirection[1, 0];
+  AxisVec[2] := AxisDirection[2, 0];
+
+  for i := 0 to N - 1 do
+  begin
+    PointVec[0] := Points[0, i];
+    PointVec[1] := Points[1, i];
+    PointVec[2] := Points[2, i];
+
+    // Dot product to project onto axis
+    Proj := PointVec[0] * AxisVec[0] +
+            PointVec[1] * AxisVec[1] +
+            PointVec[2] * AxisVec[2];
+
+    if Proj < MinProj then
+      MinProj := Proj;
+    if Proj > MaxProj then
+      MaxProj := Proj;
+  end;
+
+  Result := MaxProj - MinProj;
+end;
+
+end.
+

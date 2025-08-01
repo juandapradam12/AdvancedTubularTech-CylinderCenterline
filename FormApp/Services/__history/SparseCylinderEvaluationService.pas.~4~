@@ -1,0 +1,177 @@
+unit SparseCylinderEvaluationService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix, StripeDetectionService, PCAMultiAxisIteratorService, CircleFitService;
+
+type
+  TCylinderEvalResult = record
+    AxisDir: TDoubleMatrix;
+    AxisPoint: TDoubleMatrix;
+    Radius: Double;
+    RadiusStd: Double;
+    ZIntercept: TDoubleMatrix;
+    LengthEstimate: Double;
+  end;
+
+procedure RunMultiAxisCylinderEvaluation(const Points, EigenVectors: TDoubleMatrix);
+
+implementation
+
+// === Compute Z intercept ===
+function ComputeZIntercept(const AxisPoint, AxisDir: TDoubleMatrix): TDoubleMatrix;
+var
+  vz, t: Double;
+begin
+  Result := TDoubleMatrix.Create(3, 1);
+  vz := AxisDir[2,0];
+  if Abs(vz) < 1e-8 then
+  begin
+    Result[0,0] := 0;
+    Result[1,0] := 0;
+    Result[2,0] := 0;
+    Exit;
+  end;
+  t := -AxisPoint[2,0] / vz;
+  Result[0,0] := AxisPoint[0,0] + t * AxisDir[0,0];
+  Result[1,0] := AxisPoint[1,0] + t * AxisDir[1,0];
+  Result[2,0] := AxisPoint[2,0] + t * AxisDir[2,0];
+end;
+
+// === Compute length estimate ===
+function ComputeLengthEstimate(const Points, AxisDir: TDoubleMatrix): Double;
+var
+  i: Integer;
+  Proj, MinP, MaxP: Double;
+begin
+  MinP := MaxDouble;
+  MaxP := -MaxDouble;
+  for i := 0 to Points.Width-1 do
+  begin
+    Proj := Points[i,0]*AxisDir[0,0] + Points[i,1]*AxisDir[1,0] + Points[i,2]*AxisDir[2,0];
+    if Proj < MinP then MinP := Proj;
+    if Proj > MaxP then MaxP := Proj;
+  end;
+  Result := MaxP - MinP;
+end;
+
+// === Evaluate one axis with its stripes ===
+function EvaluateAxisFromStripes(const Points, AxisDir: TDoubleMatrix;
+  const Stripes: array of TDoubleMatrix): TCylinderEvalResult;
+var
+  u, v: array[0..2] of Double;
+  crossTmp: array[0..2] of Double;
+  LenU, LenV: Double;
+  centers3D: array of TDoubleMatrix;
+  radii: array of Double;
+  count, i, j: Integer;
+  proj2D: TDoubleMatrix;
+  fit: TCircleFitResult;
+  center3D, axisPoint: TDoubleMatrix;
+  sumRadius, sumSq: Double;
+begin
+  // Normalize axis_dir
+  var lenAxis := Sqrt(Sqr(AxisDir[0,0]) + Sqr(AxisDir[1,0]) + Sqr(AxisDir[2,0]));
+  if lenAxis = 0 then lenAxis := 1;
+  AxisDir[0,0] := AxisDir[0,0]/lenAxis;
+  AxisDir[1,0] := AxisDir[1,0]/lenAxis;
+  AxisDir[2,0] := AxisDir[2,0]/lenAxis;
+
+  // Compute u, v as in python
+  if Abs(AxisDir[2,0]) < 0.9 then
+  begin
+    u[0] := AxisDir[1,0]; u[1] := -AxisDir[0,0]; u[2] := 0;
+  end else
+  begin
+    u[0] := AxisDir[2,0]; u[1] := 0; u[2] := -AxisDir[0,0];
+  end;
+  LenU := Sqrt(Sqr(u[0]) + Sqr(u[1]) + Sqr(u[2]));
+  if LenU = 0 then LenU := 1;
+  u[0] := u[0]/LenU; u[1] := u[1]/LenU; u[2] := u[2]/LenU;
+
+  // v = axis_dir × u
+  crossTmp[0] := AxisDir[1,0]*u[2] - AxisDir[2,0]*u[1];
+  crossTmp[1] := AxisDir[2,0]*u[0] - AxisDir[0,0]*u[2];
+  crossTmp[2] := AxisDir[0,0]*u[1] - AxisDir[1,0]*u[0];
+  LenV := Sqrt(Sqr(crossTmp[0]) + Sqr(crossTmp[1]) + Sqr(crossTmp[2]));
+  if LenV = 0 then LenV := 1;
+  v[0] := crossTmp[0]/LenV;
+  v[1] := crossTmp[1]/LenV;
+  v[2] := crossTmp[2]/LenV;
+
+  // Loop stripes
+  count := 0;
+  sumRadius := 0;
+  sumSq := 0;
+  SetLength(centers3D, Length(Stripes));
+  SetLength(radii, Length(Stripes));
+  for i := 0 to High(Stripes) do
+  begin
+    if Stripes[i].Width < 3 then Continue;
+
+    // Project stripe points to (u,v)
+    proj2D := TDoubleMatrix.Create(2, Stripes[i].Width);
+    for j := 0 to Stripes[i].Width-1 do
+    begin
+      proj2D[0,j] := Stripes[i][0,j]*u[0] + Stripes[i][1,j]*u[1] + Stripes[i][2,j]*u[2];
+      proj2D[1,j] := Stripes[i][0,j]*v[0] + Stripes[i][1,j]*v[1] + Stripes[i][2,j]*v[2];
+    end;
+
+    // Fit circle
+    fit := FitCircle2D(proj2D);
+    radii[count] := fit.Radius;
+    sumRadius := sumRadius + fit.Radius;
+
+    // Convert center2D to 3D
+    center3D := TDoubleMatrix.Create(3,1);
+    center3D[0,0] := fit.Center2D[0,0]*u[0] + fit.Center2D[0,1]*v[0];
+    center3D[1,0] := fit.Center2D[0,0]*u[1] + fit.Center2D[0,1]*v[1];
+    center3D[2,0] := fit.Center2D[0,0]*u[2] + fit.Center2D[0,1]*v[2];
+    centers3D[count] := center3D;
+
+    Inc(count);
+    proj2D.Free;
+  end;
+
+  // Mean radius and std
+  if count > 0 then
+  begin
+    Result.Radius := sumRadius / count;
+    for i := 0 to count-1 do
+      sumSq := sumSq + Sqr(radii[i]-Result.Radius);
+    if count > 1 then
+      Result.RadiusStd := Sqrt(sumSq/(count-1))
+    else
+      Result.RadiusStd := 0;
+  end else
+  begin
+    Result.Radius := 0;
+    Result.RadiusStd := 0;
+  end;
+
+  // Axis point = mean of centers3D
+  axisPoint := TDoubleMatrix.Create(3,1);
+  axisPoint[0,0] := 0; axisPoint[1,0] := 0; axisPoint[2,0] := 0;
+  for i := 0 to count-1 do
+  begin
+    axisPoint[0,0] := axisPoint[0,0] + centers3D[i][0,0];
+    axisPoint[1,0] := axisPoint[1,0] + centers3D[i][1,0];
+    axisPoint[2,0] := axisPoint[2,0] + centers3D[i][2,0];
+  end;
+  if count>0 then
+  begin
+    axisPoint[0,0] := axisPoint[0,0]/count;
+    axisPoint[1,0] := axisPoint[1,0]/count;
+    axisPoint[2,0] := axisPoint[2,0]/count;
+  end;
+
+  Result.AxisPoint := axisPoint;
+  Result.AxisDir := AxisDir;
+  Result.ZIntercept := ComputeZIntercept(axisPoint, AxisDir);
+  Result.LengthEstimate := ComputeLengthEstimate(Points, AxisDir);
+end;
+
+
+end.
+

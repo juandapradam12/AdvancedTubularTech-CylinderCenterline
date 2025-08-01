@@ -1,0 +1,140 @@
+unit SparseCylinderEvaluationService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix, StripeDetectionService, CircleFitService, InterceptService, CylinderLengthService;
+
+type
+  TCylinderEvalResult = record
+    AxisDir: TDoubleMatrix;      // 3×1
+    AxisPoint: TDoubleMatrix;    // 3×1
+    Radius: Double;
+    RadiusStd: Double;
+    ZIntercept: TDoubleMatrix;   // 3×1
+    LengthEstimate: Double;
+  end;
+
+function EvaluateAxisFromStripes(const Points: TDoubleMatrix;
+  const AxisDir: TDoubleMatrix;
+  const Stripes: array of TDoubleMatrix): TCylinderEvalResult;
+
+implementation
+
+function EvaluateAxisFromStripes(const Points: TDoubleMatrix;
+  const AxisDir: TDoubleMatrix;
+  const Stripes: array of TDoubleMatrix): TCylinderEvalResult;
+var
+  U, V: array[0..2] of Double;
+  NormAxis: array[0..2] of Double;
+  Centers: array of TDoubleMatrix;
+  Radii: array of Double;
+  Residuals: array of Double;
+  i: Integer;
+  Fit: TCircleFitResult;
+  MeanCenter: TDoubleMatrix;
+  SumX, SumY, SumZ: Double;
+  SumR, SumR2: Double;
+  N: Integer;
+begin
+  // normalize axis direction
+  NormAxis[0] := AxisDir[0,0];
+  NormAxis[1] := AxisDir[1,0];
+  NormAxis[2] := AxisDir[2,0];
+  var Len := Sqrt(Sqr(NormAxis[0])+Sqr(NormAxis[1])+Sqr(NormAxis[2]));
+  NormAxis[0] := NormAxis[0]/Len;
+  NormAxis[1] := NormAxis[1]/Len;
+  NormAxis[2] := NormAxis[2]/Len;
+
+  // build orthonormal frame (U, V perpendicular to AxisDir)
+  if Abs(NormAxis[2]) < 0.9 then
+  begin
+    U[0] := NormAxis[1]; U[1] := -NormAxis[0]; U[2] := 0;
+  end
+  else
+  begin
+    U[0] := 0; U[1] := NormAxis[2]; U[2] := -NormAxis[1];
+  end;
+  var UL := Sqrt(Sqr(U[0])+Sqr(U[1])+Sqr(U[2]));
+  U[0] := U[0]/UL; U[1] := U[1]/UL; U[2] := U[2]/UL;
+
+  V[0] := NormAxis[1]*U[2] - NormAxis[2]*U[1];
+  V[1] := NormAxis[2]*U[0] - NormAxis[0]*U[2];
+  V[2] := NormAxis[0]*U[1] - NormAxis[1]*U[0];
+  var VL := Sqrt(Sqr(V[0])+Sqr(V[1])+Sqr(V[2]));
+  V[0] := V[0]/VL; V[1] := V[1]/VL; V[2] := V[2]/VL;
+
+  // fit circles
+  SetLength(Centers, Length(Stripes));
+  SetLength(Radii, Length(Stripes));
+  N := 0; SumR := 0; SumR2 := 0;
+  for i := 0 to High(Stripes) do
+  begin
+    if Stripes[i].Width < 3 then
+      Continue;
+
+    // project stripe onto U,V
+    var P2D := TDoubleMatrix.Create(2, Stripes[i].Width);
+    var j: Integer;
+    for j := 0 to Stripes[i].Width-1 do
+    begin
+      P2D[0,j] := Stripes[i][0,j]*U[0] + Stripes[i][1,j]*U[1] + Stripes[i][2,j]*U[2];
+      P2D[1,j] := Stripes[i][0,j]*V[0] + Stripes[i][1,j]*V[1] + Stripes[i][2,j]*V[2];
+    end;
+
+    Fit := FitCircle2D(P2D);
+    Radii[N] := Fit.Radius;
+    SumR := SumR + Fit.Radius;
+    SumR2 := SumR2 + Sqr(Fit.Radius);
+
+    // back-project center to 3D
+    Centers[N] := TDoubleMatrix.Create(3,1);
+    Centers[N][0,0] := Fit.Center2D[0,0]*U[0] + Fit.Center2D[0,1]*V[0];
+    Centers[N][1,0] := Fit.Center2D[0,0]*U[1] + Fit.Center2D[0,1]*V[1];
+    Centers[N][2,0] := Fit.Center2D[0,0]*U[2] + Fit.Center2D[0,1]*V[2];
+    Inc(N);
+
+    P2D.Free;
+  end;
+
+  if N < 1 then
+    raise Exception.Create('No valid stripes with enough points.');
+
+  // compute mean center
+  MeanCenter := TDoubleMatrix.Create(3,1);
+  SumX := 0; SumY := 0; SumZ := 0;
+  for i := 0 to N-1 do
+  begin
+    SumX := SumX + Centers[i][0,0];
+    SumY := SumY + Centers[i][1,0];
+    SumZ := SumZ + Centers[i][2,0];
+  end;
+  MeanCenter[0,0] := SumX/N;
+  MeanCenter[1,0] := SumY/N;
+  MeanCenter[2,0] := SumZ/N;
+
+  // free centers
+  for i := 0 to N-1 do
+    Centers[i].Free;
+
+  // compute mean radius and std
+  Result.Radius := SumR / N;
+  if N > 1 then
+    Result.RadiusStd := Sqrt((SumR2/N) - Sqr(Result.Radius))
+  else
+    Result.RadiusStd := 0.0;
+
+  Result.AxisDir := TDoubleMatrix.Create(3,1);
+  Result.AxisDir.CopyFrom(AxisDir);
+
+  Result.AxisPoint := MeanCenter;
+
+  // Z intercept
+  Result.ZIntercept := ComputeIntercept(Result.AxisPoint, Result.AxisDir, 2);
+
+  // length
+  Result.LengthEstimate := EstimateCylinderLength(Points, Result.AxisDir);
+end;
+
+end.
+

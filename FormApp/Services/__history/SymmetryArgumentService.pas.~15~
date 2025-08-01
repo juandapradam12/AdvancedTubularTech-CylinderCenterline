@@ -1,0 +1,118 @@
+unit SymmetryArgumentService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix, ZInterceptService, PCAMultiPlaneIterationService, SmartInterceptService, CylinderLengthService, ReadDataUtils;
+
+type
+  TCylinderSymmetryResult = record
+    PlaneIndex: Integer;
+    Radius: Double;
+    LengthEstimate: Double;
+    ZIntercept: TDoubleMatrix;      // 3×1
+    AxisDirection: TDoubleMatrix;   // 3×1
+    Center3D: TDoubleMatrix;        // 3×1
+  end;
+
+function SelectCylinderBySymmetry(
+  const Points: TDoubleMatrix;
+  const Scores: TPlaneScoreArray;
+  const MeanVector, EigenVectors: TDoubleMatrix
+): TCylinderSymmetryResult;
+
+implementation
+
+function SelectCylinderBySymmetry(
+  const Points: TDoubleMatrix;
+  const Scores: TPlaneScoreArray;
+  const MeanVector, EigenVectors: TDoubleMatrix
+): TCylinderSymmetryResult;
+var
+  i, j: Integer;
+  RadiusDiff, LengthDiff, CombinedDiff: Double;
+  BestIndex: Integer;
+  MinScore: Double;
+  AxisDir: TDoubleMatrix;
+  Intercept, Center3D: TDoubleMatrix;
+  LengthEstimate: Double;
+  R1, R2, R3, L1, L2, L3: Double;
+  AvgR, AvgL: Double;
+  RDiffs, LDiffs: array[0..2] of Double;
+begin
+
+  Writeln(' ');
+  Writeln('SelectCylinderBySymmetry');
+  // Extract radius and length for all planes
+  R1 := Scores[0].Radius;
+  R2 := Scores[1].Radius;
+  R3 := Scores[2].Radius;
+
+  L1 := EstimateCylinderLength(Points,
+        GetCylinderAxisFromBestPlane(EigenVectors, Scores[0]));
+  L2 := EstimateCylinderLength(Points,
+        GetCylinderAxisFromBestPlane(EigenVectors, Scores[1]));
+  L3 := EstimateCylinderLength(Points,
+        GetCylinderAxisFromBestPlane(EigenVectors, Scores[2]));
+
+  // Compute average of the 2 most similar radii
+  AvgR := (R1 + R2 + R3) / 3;
+  Writeln('AvgR = ', AvgR);
+  AvgL := (L1 + L2 + L3) / 3;
+  Writeln('AvgL = ', AvgL);
+
+  RDiffs[0] := Abs(R1 - AvgR);
+  RDiffs[1] := Abs(R2 - AvgR);
+  RDiffs[2] := Abs(R3 - AvgR);
+
+  LDiffs[0] := Abs(L1 - AvgL);
+  LDiffs[1] := Abs(L2 - AvgL);
+  LDiffs[2] := Abs(L3 - AvgL);
+
+  Writeln(Format('RDiffs = (%.4f, %.4f, %.4f)', [RDiffs[0], RDiffs[1], RDiffs[2]]));
+  Writeln(Format('LDiffs = (%.4f, %.4f, %.4f)', [LDiffs[0], LDiffs[1], LDiffs[2]]));
+
+
+  // Choose index that minimizes combined deviation
+  MinScore := -MaxDouble;
+  BestIndex := -1;
+  for i := 0 to 2 do
+  begin
+    Writeln('i = ', i);
+    CombinedDiff := RDiffs[i] + LDiffs[i];
+    Writeln('CombinedDiff = ', CombinedDiff);
+    Writeln('MinScore = ', MinScore);
+    if CombinedDiff > MinScore then
+    begin
+      MinScore := CombinedDiff;
+      BestIndex := i;
+    end;
+  end;
+
+  Writeln('BestIndex = ', BestIndex);
+  Writeln('Scores[BestIndex].DimZ = ', Scores[BestIndex].DimZ);
+
+  // Compute axis direction from selected plane
+  AxisDir := TDoubleMatrix.Create(3, 1);
+  AxisDir[0, 0] := EigenVectors[Scores[BestIndex].DimZ, 0];
+  AxisDir[1, 0] := EigenVectors[Scores[BestIndex].DimZ, 1];
+  AxisDir[2, 0] := EigenVectors[Scores[BestIndex].DimZ, 2];
+
+  Center3D := Lift2DCenterTo3D(Scores[BestIndex].Center2D, MeanVector,
+                                EigenVectors, Scores[BestIndex].DimX,
+                                Scores[BestIndex].DimY);
+
+  Intercept := ComputeSmartIntercept(Center3D, AxisDir);
+
+  LengthEstimate := EstimateCylinderLength(Points, AxisDir);
+
+  Result.PlaneIndex := BestIndex;
+  Result.Radius := Scores[BestIndex].Radius;
+  Result.LengthEstimate := LengthEstimate;
+  Result.ZIntercept := Intercept;
+  Result.AxisDirection := AxisDir;
+  Result.Center3D := Center3D;
+end;
+
+end.
+

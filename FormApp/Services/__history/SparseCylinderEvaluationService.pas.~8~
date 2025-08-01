@@ -1,0 +1,115 @@
+unit SparseCylinderEvaluationService;
+
+interface
+
+uses
+  SysUtils, Math, Matrix,
+  StripeDetectionService, CircleFitService, InterceptService, CylinderLengthService;
+
+type
+  TCylinderEvalResult = record
+    AxisDir: TDoubleMatrix;
+    MeanRadius: Double;
+    StdRadius: Double;
+    AxisPoint: TDoubleMatrix;
+    ZIntercept: TDoubleMatrix;
+    LengthEst: Double;
+  end;
+
+procedure RunSparseCylinderEvaluation(const Points, AxisDir: TDoubleMatrix);
+
+implementation
+
+
+
+procedure RunSparseCylinderEvaluation(const Points, AxisDir: TDoubleMatrix);
+var
+  stripeRes: TStripeResult;
+  k, j: Integer;
+  u, v, axis: array[0..2] of Double;
+  lenAxis: Double;
+  proj2D: TDoubleMatrix;
+  fit: TCircleFitResult;
+  radiusSum: Double;
+  stripeCount: Integer;
+  p: array[0..2] of Double;
+begin
+  // --- normalize axis ---
+  axis[0] := AxisDir[0,0];
+  axis[1] := AxisDir[1,0];
+  axis[2] := AxisDir[2,0];
+  lenAxis := Sqrt(Sqr(axis[0]) + Sqr(axis[1]) + Sqr(axis[2]));
+  if lenAxis < 1e-12 then
+    raise Exception.Create('AxisDir has zero length.');
+  axis[0] := axis[0] / lenAxis;
+  axis[1] := axis[1] / lenAxis;
+  axis[2] := axis[2] / lenAxis;
+
+  // --- find perpendicular basis u and v ---
+  if Abs(axis[2]) < 0.9 then
+  begin
+    // cross with Z
+    u[0] := axis[1]*1 - axis[2]*0;
+    u[1] := axis[2]*0 - axis[0]*1;
+    u[2] := axis[0]*0 - axis[1]*0;
+  end
+  else
+  begin
+    // cross with Y
+    u[0] := axis[1]*0 - axis[2]*1;
+    u[1] := axis[2]*0 - axis[0]*0;
+    u[2] := axis[0]*1 - axis[1]*0;
+  end;
+  // normalize u
+  var lenU := Sqrt(Sqr(u[0]) + Sqr(u[1]) + Sqr(u[2]));
+  u[0] := u[0]/lenU; u[1] := u[1]/lenU; u[2] := u[2]/lenU;
+  // v = axis × u
+  v[0] := axis[1]*u[2] - axis[2]*u[1];
+  v[1] := axis[2]*u[0] - axis[0]*u[2];
+  v[2] := axis[0]*u[1] - axis[1]*u[0];
+  var lenV := Sqrt(Sqr(v[0]) + Sqr(v[1]) + Sqr(v[2]));
+  v[0] := v[0]/lenV; v[1] := v[1]/lenV; v[2] := v[2]/lenV;
+
+  // --- detect stripes ---
+  stripeRes := DetectStripesAlongAxis(Points, AxisDir, 3.0);
+
+  radiusSum := 0.0;
+  stripeCount := 0;
+
+  // --- process each stripe ---
+  for k := 0 to High(stripeRes.Stripes) do
+  begin
+    if (stripeRes.Stripes[k] <> nil) and (stripeRes.Stripes[k].Width >= 3) then
+    begin
+      proj2D := TDoubleMatrix.Create(2, stripeRes.Stripes[k].Width);
+      try
+        for j := 0 to stripeRes.Stripes[k].Width-1 do
+        begin
+          // original point
+          p[0] := stripeRes.Stripes[k][0,j];
+          p[1] := stripeRes.Stripes[k][1,j];
+          p[2] := stripeRes.Stripes[k][2,j];
+          // project onto u,v
+          proj2D[0,j] := p[0]*u[0] + p[1]*u[1] + p[2]*u[2];
+          proj2D[1,j] := p[0]*v[0] + p[1]*v[1] + p[2]*v[2];
+        end;
+
+        // fit circle in plane
+        fit := FitCircle2D(proj2D);
+        radiusSum := radiusSum + fit.Radius;
+        Inc(stripeCount);
+        Writeln(Format('Stripe %d -> Radius %.4f', [k+1, fit.Radius]));
+      finally
+        proj2D.Free;
+      end;
+    end;
+  end;
+
+  if stripeCount > 0 then
+    Writeln(Format('=== Mean Radius = %.4f', [radiusSum / stripeCount]))
+  else
+    Writeln('No valid stripes found.');
+end;
+
+end.
+
