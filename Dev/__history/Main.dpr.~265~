@@ -17,7 +17,8 @@ uses
   SmartInterceptService,
   StripeDetectionService,
   PCAMultiAxisIteratorService,
-  SymmetryArgumentService;
+  SymmetryArgumentService,
+  PCAIterationLoggerService;
 
 //
 
@@ -83,7 +84,12 @@ begin
   //FileName := '6 Points Test - In Z Axis.txt';
   //FileName := '5 Points Test In Z Axis'  + '.txt';
 
-  FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 10.5 Apart - 82.4 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 10.5 Apart - 82.4 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 50.9 Apart - 81.4 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 200.8 Apart - 82.1 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 11 Apart - 71.2 OD.TXT';
+  FleName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 32 Apart - 70 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 395.2 Apart - 70.2 OD.TXT';
 
   Writeln('FileName: ', FileName);
 
@@ -191,32 +197,8 @@ begin
 
   Writeln(' ');
 
-  begin
-    // 1. Compute projections and fit circles for all planes
-    PlaneScores := ScoreAllPCAPlanes(Points, PCAResult.EigenVectors, PCAResult.MeanVector);
-
-    // 2. Loop through all three planes
-    for i := 0 to High(PlaneScores) do
-    begin
-      AxisDir := GetCylinderAxisFromBestPlane(PCAResult.EigenVectors, PlaneScores[i]);
-      Intercept := ComputeSmartIntercept(
-                      Lift2DCenterTo3D(PlaneScores[i].Center2D, PCAResult.MeanVector, PCAResult.EigenVectors,
-                                       PlaneScores[i].DimX, PlaneScores[i].DimY), AxisDir);
-
-      LengthEstimate := EstimateCylinderLength(Points, AxisDir);
-
-      // Print results for this axis
-      Writeln(Format('--- Axis %d ---', [i]));
-      Writeln(Format('Axis Direction: (%.4f, %.4f, %.4f)',
-        [AxisDir[0,0], AxisDir[1,0], AxisDir[2,0]]));
-      Writeln(Format('Fitted Radius: %.4f', [PlaneScores[i].Radius]));
-      Writeln(Format('Residual: %.4f', [PlaneScores[i].Residual]));
-      Writeln(Format('Z Intercept: (%.4f, %.4f, %.4f)',
-        [Intercept[0,0], Intercept[1,0], Intercept[2,0]]));
-      Writeln(Format('Length Estimate: %.4f', [LengthEstimate]));
-      Writeln('');
-    end;
-  end;
+  // Show PCA-based evaluations for each principal axis
+  PrintPCAIterationSummaries(Points, PCAResult.EigenVectors, PCAResult.MeanVector);
 
 
   // END TIMER

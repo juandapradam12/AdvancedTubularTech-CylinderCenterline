@@ -84,7 +84,12 @@ begin
   //FileName := '6 Points Test - In Z Axis.txt';
   //FileName := '5 Points Test In Z Axis'  + '.txt';
 
-  FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 10.5 Apart - 82.4 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 10.5 Apart - 82.4 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 50.9 Apart - 81.4 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 200.8 Apart - 82.1 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 11 Apart - 71.2 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 32 Apart - 70 OD.TXT';
+  FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 395.2 Apart - 70.2 OD.TXT';
 
   Writeln('FileName: ', FileName);
 
