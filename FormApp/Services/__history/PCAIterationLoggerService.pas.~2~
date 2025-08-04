@@ -1,0 +1,54 @@
+unit PCAIterationLoggerService;
+
+interface
+
+uses
+  SysUtils, Matrix, PCAMultiPlaneIterationService, CircleFitService, PCAProjectionService,
+  InterceptService, CylinderLengthService, Types, ZInterceptService, SmartInterceptService;
+
+procedure PrintPCAIterationSummaries(
+  const Points, EigenVectors, MeanVector: TDoubleMatrix);
+
+implementation
+
+procedure PrintPCAIterationSummaries(
+  const Points, EigenVectors, MeanVector: TDoubleMatrix);
+var
+  PlaneScores: TPlaneScoreArray;
+  AxisDir, Intercept: TDoubleMatrix;
+  LengthEstimate: Double;
+  i: Integer;
+begin
+  // 1. Compute projections and fit circles for all planes
+  PlaneScores := ScoreAllPCAPlanes(Points, EigenVectors, MeanVector);
+
+  // 2. Loop through all three planes
+  for i := 0 to High(PlaneScores) do
+  begin
+    AxisDir := GetCylinderAxisFromBestPlane(EigenVectors, PlaneScores[i]);
+    Intercept := ComputeSmartIntercept(
+                   Lift2DCenterTo3D(
+                     PlaneScores[i].Center2D,
+                     MeanVector,
+                     EigenVectors,
+                     PlaneScores[i].DimX,
+                     PlaneScores[i].DimY),
+                   AxisDir);
+
+    LengthEstimate := EstimateCylinderLength(Points, AxisDir);
+
+    // Print results for this axis
+    Writeln(Format('--- Axis %d ---', [i]));
+    Writeln(Format('Axis Direction: (%.4f, %.4f, %.4f)',
+      [AxisDir[0,0], AxisDir[1,0], AxisDir[2,0]]));
+    Writeln(Format('Fitted Radius: %.4f', [PlaneScores[i].Radius]));
+    Writeln(Format('Residual: %.4f', [PlaneScores[i].Residual]));
+    Writeln(Format('Z Intercept: (%.4f, %.4f, %.4f)',
+      [Intercept[0,0], Intercept[1,0], Intercept[2,0]]));
+    Writeln(Format('Length Estimate: %.4f', [LengthEstimate]));
+    Writeln('');
+  end;
+end;
+
+end.
+

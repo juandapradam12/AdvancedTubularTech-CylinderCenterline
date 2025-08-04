@@ -17,7 +17,8 @@ uses
   SmartInterceptService,
   StripeDetectionService,
   PCAMultiAxisIteratorService,
-  SymmetryArgumentService;
+  SymmetryArgumentService,
+  PCAIterationLoggerService;
 
 //
 
@@ -69,10 +70,11 @@ begin
   Writeln('---- Read Point Cloud ----');
   Writeln(' ');
 
-  FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\'; //20250625 JDPM Test Results\';
+  //FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\'; //20250625 JDPM Test Results\';
   //FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\20250625 JDPM Test Results\';
+  FolderPath := 'C:\Users\SKG Tecnología\Documents\AdvancedTubularTech-CylinderCenterline\Dev\Data\VTube-LASER 6 Point Cylinders\';
 
-  FileName := 'Point Cloud - 3 inch OD - Single Cylinder.txt';
+  //FileName := 'Point Cloud - 3 inch OD - Single Cylinder.txt';
   //FileName := 'Point Cloud - 0.25 inch OD - Single Cylinder.TXT';
   //FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder - Short - Exhaust Pipe - Straight 1.txt';
   //FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder Super Short Two Stripes.txt';
@@ -81,6 +83,8 @@ begin
   //FileName := '8 Points Test - In Z Axis.txt';
   //FileName := '6 Points Test - In Z Axis.txt';
   //FileName := '5 Points Test In Z Axis'  + '.txt';
+
+  FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 10.5 Apart - 82.4 OD.TXT';
 
   Writeln('FileName: ', FileName);
 
@@ -187,6 +191,9 @@ begin
   Writeln(Format('L/OD Ratio      = %.4f', [LOD]));
 
   Writeln(' ');
+
+  // Show PCA-based evaluations for each principal axis
+  PrintPCAIterationSummaries(Points, PCAResult.EigenVectors, PCAResult.MeanVector);
 
 
   // END TIMER
