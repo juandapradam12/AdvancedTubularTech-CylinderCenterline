@@ -131,7 +131,7 @@ begin
   // CENTER LIFTING //
   LiftedCenter := Lift2DCenterTo3D(BestPlane.Center2D, PCAResult.MeanVector, PCAResult.EigenVectors, BestPlane.DimX, BestPlane.DimY);
 
-  // Z INTERCEPT //
+  // INTERCEPT //
   Intercept := ComputeSmartIntercept(LiftedCenter, AxisDirection);
 
   // LENGTH ESTIMATE //
@@ -180,6 +180,18 @@ begin
   // Select the best axis using symmetry-based logic
   BestSymmetryResult := SelectCylinderBySymmetry(Points, PlaneScores,  PCAResult.MeanVector, PCAResult.EigenVectors);
 
+  // Axis Direction //
+  AxisDirection := BestSymmetryResult.AxisDirection;
+
+  // Radius //
+  Radius := BestSymmetryResult.Radius;
+
+  // Intercept //
+  Intercept := BestSymmetryResult.ZIntercept;
+
+  // Length Estimate //
+  LengthEstimate := BestSymmetryResult.LengthEstimate;
+
   // L/OD Ratio //
   LOD := LengthEstimate / (2.0 * Radius);  // L / OD
 
@@ -192,21 +204,21 @@ begin
   Writeln(' ');
 
   Writeln(Format('Axis Direction = (%.4f, %.4f, %.4f)', [
-    BestSymmetryResult.AxisDirection[0,0],
-    BestSymmetryResult.AxisDirection[1,0],
-    BestSymmetryResult.AxisDirection[2,0]
+    AxisDirection[0,0],
+    AxisDirection[1,0],
+    AxisDirection[2,0]
   ]));
 
-  Writeln(Format('Fitted Radius = %.4f', [BestSymmetryResult.Radius]));
+  Writeln(Format('Fitted Radius = %.4f', [Radius]));
   Writeln(Format('Intercept = (%.4f, %.4f, %.4f)', [
-    BestSymmetryResult.ZIntercept[0,0],
-    BestSymmetryResult.ZIntercept[1,0],
-    BestSymmetryResult.ZIntercept[2,0]
+    Intercept[0,0],
+    Intercept[1,0],
+    Intercept[2,0]
   ]));
 
   Writeln(' ');
 
-  Writeln(Format('Length Estimate = %.4f', [BestSymmetryResult.LengthEstimate]));
+  Writeln(Format('Length Estimate = %.4f', [LengthEstimate]));
   Writeln(Format('L/OD Ratio      = %.4f', [LOD]));
 
   Writeln(' ');

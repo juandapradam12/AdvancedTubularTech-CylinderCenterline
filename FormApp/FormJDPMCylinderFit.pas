@@ -22,7 +22,8 @@ uses
   SmartInterceptService,
   StripeDetectionService,
   PCAMultiAxisIteratorService,
-  SymmetryArgumentService;
+  SymmetryArgumentService,
+  CylinderEndpointsService;
 
 var
   StartTime: Int64;
@@ -91,6 +92,7 @@ var
 
   BestSymmetryResult: TCylinderSymmetryResult;
 
+  Endpoints: TDoubleMatrix;
 
 begin
 
@@ -153,6 +155,9 @@ begin
     // L/OD Ratio //
     LOD := LengthEstimate / (2.0 * Radius);  // L / OD
 
+    // Cylinder Endpoints //
+    Endpoints := GetCylinderEndpoints(Intercept, AxisDirection, LengthEstimate);
+
     //// PRINT IN TERMINAL Continous Mapping Fit ////
 
     sMemo1.Lines.Add('---- Continous Mapping Fit ----');
@@ -175,6 +180,10 @@ begin
 
     sMemo1.Lines.Add(' ');
 
+    sMemo1.Lines.Add(Format('Start Point = (%.4f, %.4f, %.4f)', [Endpoints[0, 0], Endpoints[1, 0], Endpoints[2, 0]]));
+    sMemo1.Lines.Add(Format('End Point =   (%.4f, %.4f, %.4f)', [Endpoints[0, 1], Endpoints[1, 1], Endpoints[2, 1]]));
+
+    sMemo1.Lines.Add(' ');
 
     //// SYMMETRICAL FIT ////
     ///
@@ -187,6 +196,9 @@ begin
 
     // L/OD Ratio //
     LOD := LengthEstimate / (2.0 * Radius);  // L / OD
+
+    // Cylinder Endpoints //
+    Endpoints := GetCylinderEndpoints(Intercept, AxisDirection, LengthEstimate);
 
     // PRINT IN TERMINAL SYMMETRIC FIT //
 
@@ -210,6 +222,11 @@ begin
 
     sMemo1.Lines.Add(Format('Length Estimate = %.4f', [BestSymmetryResult.LengthEstimate]));
     sMemo1.Lines.Add(Format('L/OD Ratio      = %.4f', [LOD]));
+
+    sMemo1.Lines.Add(' ');
+
+    sMemo1.Lines.Add(Format('Start Point = (%.4f, %.4f, %.4f)', [Endpoints[0, 0], Endpoints[1, 0], Endpoints[2, 0]]));
+    sMemo1.Lines.Add(Format('End Point =   (%.4f, %.4f, %.4f)', [Endpoints[0, 1], Endpoints[1, 1], Endpoints[2, 1]]));
 
     sMemo1.Lines.Add(' ');
 
