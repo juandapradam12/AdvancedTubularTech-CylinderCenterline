@@ -18,7 +18,8 @@ uses
   StripeDetectionService,
   PCAMultiAxisIteratorService,
   SymmetryArgumentService,
-  PCAIterationLoggerService;
+  PCAIterationLoggerService,
+  CylinderEndpointsService;
 
 //
 
@@ -54,6 +55,8 @@ var
 
   BestSymmetryResult: TCylinderSymmetryResult;
 
+  Endpoints: TDoubleMatrix;
+
 
 begin
   //////// CYLINDER CENTERLINE ALGORITHM ////////
@@ -70,14 +73,14 @@ begin
   Writeln('---- Read Point Cloud ----');
   Writeln(' ');
 
-  //FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\'; //20250625 JDPM Test Results\';
+  FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\'; //20250625 JDPM Test Results\';
   //FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\20250625 JDPM Test Results\';
-  FolderPath := 'C:\Users\SKG Tecnología\Documents\AdvancedTubularTech-CylinderCenterline\Dev\Data\VTube-LASER 6 Point Cylinders\';
+  //FolderPath := 'C:\Users\SKG Tecnología\Documents\AdvancedTubularTech-CylinderCenterline\Dev\Data\VTube-LASER 6 Point Cylinders\';
 
   //FileName := 'Point Cloud - 3 inch OD - Single Cylinder.txt';
   //FileName := 'Point Cloud - 0.25 inch OD - Single Cylinder.TXT';
   //FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder - Short - Exhaust Pipe - Straight 1.txt';
-  //FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder Super Short Two Stripes.txt';
+  FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder Super Short Two Stripes.txt';
   //FileName := 'Point Cloud - 76.2 mm OD - 188 points total.txt';
   //FileName := 'Point Cloud - 76.2 mm OD - 25 points total.txt';
   //FileName := '8 Points Test - In Z Axis.txt';
@@ -89,7 +92,7 @@ begin
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 200.8 Apart - 82.1 OD.TXT';
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 11 Apart - 71.2 OD.TXT';
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 32 Apart - 70 OD.TXT';
-  FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 395.2 Apart - 70.2 OD.TXT';
+  //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 395.2 Apart - 70.2 OD.TXT';
 
   Writeln('FileName: ', FileName);
 
@@ -137,6 +140,9 @@ begin
   // L/OD Ratio //
   LOD := LengthEstimate / (2.0 * Radius);  // L / OD
 
+  // Cylinder Endpoints //
+  Endpoints := GetCylinderEndpoints(Intercept, AxisDirection, LengthEstimate);
+
   //// PRINT IN TERMINAL Continous Mapping Fit ////
 
   Writeln('---- Continous Mapping Fit ----');
@@ -159,6 +165,11 @@ begin
 
   Writeln(' ');
 
+  Writeln(Format('Start Point = (%.4f, %.4f, %.4f)', [Endpoints[0, 0], Endpoints[1, 0], Endpoints[2, 0]]));
+  Writeln(Format('End Point =   (%.4f, %.4f, %.4f)', [Endpoints[0, 1], Endpoints[1, 1], Endpoints[2, 1]]));
+
+  Writeln(' ');
+
 
   //// SYMMETRICAL FIT ////
   ///
@@ -171,6 +182,9 @@ begin
 
   // L/OD Ratio //
   LOD := LengthEstimate / (2.0 * Radius);  // L / OD
+
+  // Cylinder Endpoints //
+  Endpoints := GetCylinderEndpoints(Intercept, AxisDirection, LengthEstimate);
 
   // PRINT IN TERMINAL SYMMETRIC FIT //
 
@@ -198,7 +212,12 @@ begin
   Writeln(' ');
 
   // Show PCA-based evaluations for each principal axis
-  PrintPCAIterationSummaries(Points, PCAResult.EigenVectors, PCAResult.MeanVector);
+  //PrintPCAIterationSummaries(Points, PCAResult.EigenVectors, PCAResult.MeanVector);
+
+  Writeln(Format('Start Point = (%.4f, %.4f, %.4f)', [Endpoints[0, 0], Endpoints[1, 0], Endpoints[2, 0]]));
+  Writeln(Format('End Point =   (%.4f, %.4f, %.4f)', [Endpoints[0, 1], Endpoints[1, 1], Endpoints[2, 1]]));
+
+  Writeln(' ');
 
 
   // END TIMER

@@ -1,0 +1,62 @@
+unit CylinderEndpointsService;
+
+interface
+
+uses
+  SysUtils, Matrix, Math;
+
+procedure GetCylinderEndpoints(const Points, AxisDir, ZIntercept: TDoubleMatrix;
+                                out StartPoint, EndPoint: TDoubleMatrix);
+
+implementation
+
+procedure GetCylinderEndpoints(const Points, AxisDir, ZIntercept: TDoubleMatrix;
+                                out StartPoint, EndPoint: TDoubleMatrix);
+var
+  i, N: Integer;
+  P: array[0..2] of Double;
+  T, TMin, TMax: Double;
+begin
+  if Points.Height <> 3 then
+    raise Exception.Create('Points must be 3×N');
+  if (AxisDir.Height <> 3) or (AxisDir.Width <> 1) then
+    raise Exception.Create('AxisDir must be 3×1');
+  if (ZIntercept.Height <> 3) or (ZIntercept.Width <> 1) then
+    raise Exception.Create('ZIntercept must be 3×1');
+
+  N := Points.Width;
+
+  TMin := MaxDouble;
+  TMax := -MaxDouble;
+
+  for i := 0 to N - 1 do
+  begin
+    // Compute vector P - ZIntercept
+    P[0] := Points[i, 0] - ZIntercept[0, 0];
+    P[1] := Points[i, 1] - ZIntercept[1, 0];
+    P[2] := Points[i, 2] - ZIntercept[2, 0];
+
+    // Scalar projection onto axis direction
+    T := P[0] * AxisDir[0, 0] +
+         P[1] * AxisDir[1, 0] +
+         P[2] * AxisDir[2, 0];
+
+    if T < TMin then TMin := T;
+    if T > TMax then TMax := T;
+  end;
+
+  // Compute StartPoint = ZIntercept + TMin * AxisDir
+  StartPoint := TDoubleMatrix.Create(3, 1);
+  EndPoint   := TDoubleMatrix.Create(3, 1);
+
+  StartPoint[0,0] := ZIntercept[0,0] + TMin * AxisDir[0,0];
+  StartPoint[1,0] := ZIntercept[1,0] + TMin * AxisDir[1,0];
+  StartPoint[2,0] := ZIntercept[2,0] + TMin * AxisDir[2,0];
+
+  EndPoint[0,0] := ZIntercept[0,0] + TMax * AxisDir[0,0];
+  EndPoint[1,0] := ZIntercept[1,0] + TMax * AxisDir[1,0];
+  EndPoint[2,0] := ZIntercept[2,0] + TMax * AxisDir[2,0];
+end;
+
+end.
+
