@@ -73,14 +73,14 @@ begin
   Writeln('---- Read Point Cloud ----');
   Writeln(' ');
 
-  FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\'; //20250625 JDPM Test Results\';
+  //FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\'; //20250625 JDPM Test Results\';
   //FolderPath := 'C:\Users\SKG Tecnología\Documents\ATTInc-CylinderCenterline\Data\20250625 JDPM Test Results\';
-  //FolderPath := 'C:\Users\SKG Tecnología\Documents\AdvancedTubularTech-CylinderCenterline\Dev\Data\VTube-LASER 6 Point Cylinders\';
+  FolderPath := 'C:\Users\SKG Tecnología\Documents\AdvancedTubularTech-CylinderCenterline\Dev\Data\VTube-LASER 6 Point Cylinders\';
 
   //FileName := 'Point Cloud - 3 inch OD - Single Cylinder.txt';
   //FileName := 'Point Cloud - 0.25 inch OD - Single Cylinder.TXT';
   //FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder - Short - Exhaust Pipe - Straight 1.txt';
-  FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder Super Short Two Stripes.txt';
+  //FileName := 'Point Cloud - 2.75 inch OD - Single Cylinder Super Short Two Stripes.txt';
   //FileName := 'Point Cloud - 76.2 mm OD - 188 points total.txt';
   //FileName := 'Point Cloud - 76.2 mm OD - 25 points total.txt';
   //FileName := '8 Points Test - In Z Axis.txt';
@@ -89,7 +89,7 @@ begin
 
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 10.5 Apart - 82.4 OD.TXT';
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 50.9 Apart - 81.4 OD.TXT';
-  //FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 200.8 Apart - 82.1 OD.TXT';
+  FileName := 'Point Cloud-Juan Test Data - 6 points - Close to XY plane - 200.8 Apart - 82.1 OD.TXT';
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 11 Apart - 71.2 OD.TXT';
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 32 Apart - 70 OD.TXT';
   //FileName := 'Point Cloud-Juan Test Data - 6 points - Near Z Axis - 395.2 Apart - 70.2 OD.TXT';

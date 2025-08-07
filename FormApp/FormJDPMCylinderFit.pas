@@ -194,6 +194,18 @@ begin
     // Select the best axis using symmetry-based logic
     BestSymmetryResult := SelectCylinderBySymmetry(Points, PlaneScores,  PCAResult.MeanVector, PCAResult.EigenVectors);
 
+    // Axis Direction //
+    AxisDirection := BestSymmetryResult.AxisDirection;
+
+    // Radius //
+    Radius := BestSymmetryResult.Radius;
+
+    // Intercept //
+    Intercept := BestSymmetryResult.ZIntercept;
+
+    // Length Estimate //
+    LengthEstimate := BestSymmetryResult.LengthEstimate;
+
     // L/OD Ratio //
     LOD := LengthEstimate / (2.0 * Radius);  // L / OD
 
@@ -206,21 +218,21 @@ begin
     sMemo1.Lines.Add(' ');
 
     sMemo1.Lines.Add(Format('Axis Direction = (%.4f, %.4f, %.4f)', [
-      BestSymmetryResult.AxisDirection[0,0],
-      BestSymmetryResult.AxisDirection[1,0],
-      BestSymmetryResult.AxisDirection[2,0]
+      AxisDirection[0,0],
+      AxisDirection[1,0],
+      AxisDirection[2,0]
     ]));
 
-    sMemo1.Lines.Add(Format('Fitted Radius = %.4f', [BestSymmetryResult.Radius]));
+    sMemo1.Lines.Add(Format('Fitted Radius = %.4f', [Radius]));
     sMemo1.Lines.Add(Format('Intercept = (%.4f, %.4f, %.4f)', [
-      BestSymmetryResult.ZIntercept[0,0],
-      BestSymmetryResult.ZIntercept[1,0],
-      BestSymmetryResult.ZIntercept[2,0]
+      Intercept[0,0],
+      Intercept[1,0],
+      Intercept[2,0]
     ]));
 
     sMemo1.Lines.Add(' ');
 
-    sMemo1.Lines.Add(Format('Length Estimate = %.4f', [BestSymmetryResult.LengthEstimate]));
+    sMemo1.Lines.Add(Format('Length Estimate = %.4f', [LengthEstimate]));
     sMemo1.Lines.Add(Format('L/OD Ratio      = %.4f', [LOD]));
 
     sMemo1.Lines.Add(' ');
